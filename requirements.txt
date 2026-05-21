@@ -1,0 +1,10 @@
+nuclear-rose>=1.1.7
+numpy
+scipy
+matplotlib
+pandas
+tqdm
+nbformat
+nbclient
+jupyter
+ipykernel
