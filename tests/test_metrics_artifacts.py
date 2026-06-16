@@ -7,6 +7,7 @@ import numpy as np
 
 from lrom_bench.artifacts import (
     ArrayComparison,
+    METADATA_KEY,
     compare_npz_artifacts,
     load_npz_artifact,
     save_npz_artifact,
@@ -24,6 +25,21 @@ def test_save_and_load_npz_artifact(tmp_path: Path) -> None:
 
     assert np.allclose(loaded_arrays["coeff"], arrays["coeff"])
     assert loaded_metadata == metadata
+
+
+def test_save_npz_artifact_rejects_reserved_metadata_key(tmp_path: Path) -> None:
+    path = tmp_path / "artifact.npz"
+
+    try:
+        save_npz_artifact(
+            path,
+            arrays={METADATA_KEY: np.array([1.0])},
+            metadata={"config_hash": "abc123"},
+        )
+    except ValueError as exc:
+        assert METADATA_KEY in str(exc)
+    else:
+        raise AssertionError("save_npz_artifact accepted reserved metadata key")
 
 
 def test_compare_npz_artifacts_and_write_report(tmp_path: Path) -> None:
@@ -46,3 +62,14 @@ def test_compare_npz_artifacts_and_write_report(tmp_path: Path) -> None:
     assert payload["comparisons"] == [
         {"name": "x", "passed": True, "max_abs_error": 1.000088900582341e-12}
     ]
+
+
+def test_write_parity_report_rejects_empty_comparisons(tmp_path: Path) -> None:
+    report = tmp_path / "report.json"
+
+    try:
+        write_parity_report(report, comparisons=[], metadata={"config_hash": "abc123"})
+    except ValueError as exc:
+        assert "comparison" in str(exc)
+    else:
+        raise AssertionError("write_parity_report accepted empty comparisons")

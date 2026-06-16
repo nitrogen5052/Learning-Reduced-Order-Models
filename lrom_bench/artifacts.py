@@ -23,6 +23,8 @@ def save_npz_artifact(
     arrays: dict[str, np.ndarray],
     metadata: dict[str, Any],
 ) -> None:
+    if METADATA_KEY in arrays:
+        raise ValueError(f"array key is reserved for metadata: {METADATA_KEY}")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(arrays)
     payload[METADATA_KEY] = np.array(json.dumps(metadata, sort_keys=True))
@@ -70,6 +72,8 @@ def write_parity_report(
     comparisons: list[ArrayComparison],
     metadata: dict[str, Any],
 ) -> None:
+    if not comparisons:
+        raise ValueError("parity report requires at least one comparison")
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "passed": all(item.passed for item in comparisons),
