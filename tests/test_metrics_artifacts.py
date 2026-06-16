@@ -43,3 +43,6 @@ def test_compare_npz_artifacts_and_write_report(tmp_path: Path) -> None:
     payload = json.loads(report.read_text())
     assert payload["passed"] is True
     assert payload["metadata"] == metadata
+    assert payload["comparisons"] == [
+        {"name": "x", "passed": True, "max_abs_error": 1.000088900582341e-12}
+    ]
