@@ -21,6 +21,8 @@ def code(text: str):
 def write_notebook(path: Path, cells: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     nb = nbf.v4.new_notebook()
+    for idx, cell in enumerate(cells):
+        cell["id"] = f"notebook01-{idx:02d}"
     nb["cells"] = cells
     nb["metadata"] = {
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
