@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from lrom_bench.sampling import centered_box_samples, one_at_a_time_scan_samples
+from lrom_bench.sampling import (
+    centered_1d_values,
+    centered_box_samples,
+    one_at_a_time_scan_samples,
+)
 
 
 def test_one_at_a_time_scan_samples_preserves_center_except_active_coordinate() -> None:
@@ -34,3 +38,9 @@ def test_centered_box_samples_are_deterministic_and_include_center() -> None:
     assert np.all(samples_a[:, 0] <= 11.0)
     assert np.all(samples_a[:, 1] >= 1.5)
     assert np.all(samples_a[:, 1] <= 2.5)
+
+
+def test_centered_1d_values_are_symmetric_and_include_center() -> None:
+    values = centered_1d_values(center=10.0, width=2.0, n=5)
+
+    assert values.tolist() == [8.0, 9.0, 10.0, 11.0, 12.0]

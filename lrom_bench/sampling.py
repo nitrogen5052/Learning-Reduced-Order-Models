@@ -13,6 +13,14 @@ class ScanInfo:
     slc: slice
 
 
+def centered_1d_values(center: float, width: float, n: int) -> np.ndarray:
+    if n < 2:
+        raise ValueError("n must be at least 2")
+    if width <= 0.0:
+        raise ValueError("width must be positive")
+    return np.linspace(float(center) - float(width), float(center) + float(width), int(n))
+
+
 def one_at_a_time_scan_samples(
     center: np.ndarray,
     widths: np.ndarray,

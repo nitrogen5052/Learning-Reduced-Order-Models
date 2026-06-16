@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lrom_bench.config import BenchmarkPaths, Notebook02Config
+from lrom_bench.config import BenchmarkPaths, Notebook01Config, Notebook02Config
 
 
 def test_package_imports() -> None:
@@ -16,6 +16,15 @@ def test_notebook02_config_hash_is_stable() -> None:
 
     assert cfg.config_hash() == Notebook02Config(n_mesh=64, n_phi=3, n_u=5).config_hash()
     assert cfg.config_hash() != Notebook02Config(n_mesh=65, n_phi=3, n_u=5).config_hash()
+    assert len(cfg.config_hash()) == 16
+
+
+def test_notebook01_config_hash_is_stable() -> None:
+    cfg = Notebook01Config(n_mesh=64, n_basis=3, n_u=5)
+
+    assert cfg.config_hash() == Notebook01Config(n_mesh=64, n_basis=3, n_u=5).config_hash()
+    assert cfg.config_hash() != Notebook01Config(n_mesh=65, n_basis=3, n_u=5).config_hash()
+    assert cfg.parameter_names == ("Vv", "Rv", "av")
     assert len(cfg.config_hash()) == 16
 
 
