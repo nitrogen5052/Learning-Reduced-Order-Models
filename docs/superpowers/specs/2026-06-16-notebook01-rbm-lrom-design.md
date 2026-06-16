@@ -88,6 +88,14 @@ The notebook has one continuous story with two acts.
 
 Notebook 1 drives package changes on a need-by-need basis.
 
+Notebook code should stay decomposed and readable:
+
+- Keep plotting logic visible in notebook cells.
+- Do not add package functions whose job is to make plots.
+- Do not add one whole function that runs the full notebook or full scientific workflow.
+- Prefer small package helpers that each produce one scientific object: samples, alphas, potentials, wavefunctions, basis data, coefficients, predictors, fitted LROMs, or metrics.
+- Notebook cells may combine these objects into figures so the scientific flow remains visible.
+
 Allowed package changes:
 
 - Add reusable ROSE/FOM helpers needed by Notebook 1.
