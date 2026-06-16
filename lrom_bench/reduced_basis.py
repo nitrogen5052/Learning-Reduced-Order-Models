@@ -37,6 +37,32 @@ class CentralBasisData:
         return int(np.asarray(self.vectors).shape[1])
 
 
+def build_centered_svd_basis(
+    phi0: np.ndarray,
+    snapshots: np.ndarray,
+    mesh: np.ndarray,
+    n_basis: int,
+) -> CentralBasisData:
+    phi0 = np.asarray(phi0, dtype=np.complex128)
+    snapshots = np.asarray(snapshots, dtype=np.complex128)
+    mesh = np.asarray(mesh, dtype=float)
+    if snapshots.ndim != 2:
+        raise ValueError("snapshots must have shape (n_samples, n_mesh)")
+    if phi0.ndim != 1:
+        raise ValueError("phi0 must be one-dimensional")
+    if snapshots.shape[1] != phi0.size:
+        raise ValueError("snapshots and phi0 must share the mesh dimension")
+    if n_basis < 1:
+        raise ValueError("n_basis must be positive")
+    if n_basis > min(snapshots.shape):
+        raise ValueError("n_basis cannot exceed the snapshot matrix rank limit")
+
+    centered = snapshots - phi0[np.newaxis, :]
+    _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
+    vectors = vh[:n_basis].T
+    return CentralBasisData(phi0=phi0, vectors=vectors, mesh=mesh)
+
+
 def project_ls_coordinates(
     basis: CentralBasisData,
     wavefunctions: np.ndarray,
