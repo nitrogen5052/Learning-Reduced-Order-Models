@@ -55,6 +55,17 @@ flowchart LR
 
 This is the benchmark spine: each module owns one scientific stage. The flow is intentionally more concrete than a general framework, because the first goal is reliable Notebook 02 parity.
 
+## Notebook-Driven Helper Rule
+
+Notebook 1 adds only small reusable helpers needed by the notebook:
+
+- `Notebook01Config` records the single-wavefunction benchmark settings.
+- `sampling.centered_1d_values` creates the visible `Vv` scan.
+- `reduced_basis.build_centered_svd_basis` creates the central-reference basis used by the notebook.
+- `rose_fom.central_real_ws_parameters` and `rose_fom.real_woods_saxon_potential` expose the real Woods-Saxon teaching setup.
+
+Plotting remains in notebook cells. The package should not grow plotting functions or one-call notebook workflow functions.
+
 ## Figure 3: Notebook 02 Scientific Flow
 
 ```mermaid
