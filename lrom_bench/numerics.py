@@ -17,7 +17,10 @@ def trapezoid_integral(
         widths = np.asarray(dx)
     else:
         x = np.asarray(x)
-        widths = np.diff(x, axis=0 if x.ndim > 1 else -1)
+        if x.ndim == 1:
+            widths = np.diff(x)
+        else:
+            widths = np.diff(np.moveaxis(x, axis, -1), axis=-1)
     area = (moved[..., 1:] + moved[..., :-1]) * 0.5
     return np.sum(area * widths, axis=-1)
 
