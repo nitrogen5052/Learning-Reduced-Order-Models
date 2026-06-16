@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from lrom_bench.predictors import (
     PredictorPack,
@@ -57,3 +58,22 @@ def test_potential_predictor_pack_centers_and_scales_values() -> None:
     assert pack.s_points.shape == (2,)
     assert np.allclose(features[0], 0.0)
     assert np.all(np.isfinite(features[1]))
+
+
+def test_potential_predictor_pack_rejects_more_predictors_than_svd_modes() -> None:
+    mesh = np.linspace(0.0, 1.0, 10)
+    alphas = np.array([[1.0], [2.0]])
+    center = np.array([1.5])
+
+    def potential(points: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+        return alpha[0] * (1.0 + points)
+
+    with pytest.raises(ValueError, match="not enough SVD modes"):
+        make_potential_predictor_pack(
+            potential=potential,
+            train_alphas=alphas,
+            central_alpha=center,
+            mesh=mesh,
+            n_predictors=5,
+            min_mesh_value=0.0,
+        )

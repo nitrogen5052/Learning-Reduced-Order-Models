@@ -75,6 +75,8 @@ def make_potential_predictor_pack(
     if allowed.size < n_predictors:
         raise ValueError("not enough allowed mesh points for predictor selection")
     u, singular_values, _ = np.linalg.svd(delta[allowed], full_matrices=False)
+    if n_predictors > u.shape[1]:
+        raise ValueError("not enough SVD modes for requested predictors")
     local = greedy_maxvol_indices(u[:, :n_predictors])
     indices = allowed[local]
     s_points = mesh[indices]
