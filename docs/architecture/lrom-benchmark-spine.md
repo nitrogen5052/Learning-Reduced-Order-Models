@@ -63,6 +63,7 @@ Notebook 1 adds only small reusable helpers needed by the notebook:
 - `sampling.centered_1d_values` creates the visible `Vv` scan.
 - `reduced_basis.build_centered_svd_basis` creates the central-reference basis used by the notebook.
 - `rose_fom.central_real_ws_parameters` and `rose_fom.real_woods_saxon_potential` expose the real Woods-Saxon teaching setup.
+- `rose_fom.RealWSProblem`, `rose_fom.make_real_ws_problem`, `rose_fom.make_real_ws_custom_basis`, and `rose_fom.make_real_ws_rbe` split the ROSE-backed FOM/RBM setup into small reusable pieces.
 
 Plotting remains in notebook cells. The package should not grow plotting functions or one-call notebook workflow functions.
 
