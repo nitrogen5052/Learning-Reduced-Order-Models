@@ -268,30 +268,46 @@ def notebook_cells() -> list:
         coeff_lrom_test_vv,
     )
 
-    errors_vv = {
+    vv_relative_errors = {
         "LS floor": metrics.relative_l2_rows(phi_ls_test_vv, phi_test_vv),
         "ROSE/RBM": metrics.relative_l2_rows(phi_rose_test_vv, phi_test_vv),
         "LROM": metrics.relative_l2_rows(phi_lrom_test_vv, phi_test_vv),
     }
+    vv_absolute_errors = {
+        "LS floor": metrics.absolute_l2_rows(phi_ls_test_vv, phi_test_vv),
+        "ROSE/RBM": metrics.absolute_l2_rows(phi_rose_test_vv, phi_test_vv),
+        "LROM": metrics.absolute_l2_rows(phi_lrom_test_vv, phi_test_vv),
+    }
     vv_error_summary = pd.DataFrame(
         {
-            name: {
-                "median": np.median(values),
-                "p95": np.percentile(values, 95),
-                "max": np.max(values),
+            (metric, name): {
+                "median": np.median(error_values),
+                "p95": np.percentile(error_values, 95),
+                "max": np.max(error_values),
             }
-            for name, values in errors_vv.items()
+            for metric, error_dict in {
+                "relative L2": vv_relative_errors,
+                "absolute L2": vv_absolute_errors,
+            }.items()
+            for name, error_values in error_dict.items()
         }
     ).T
     vv_error_summary
     """
     vv_wave_error_plot = r"""
-    fig, ax = plt.subplots(figsize=(6.8, 3.8), dpi=140)
-    ax.boxplot(list(errors_vv.values()), labels=list(errors_vv.keys()), showfliers=False)
-    ax.set_yscale("log")
-    ax.set_ylabel("relative L2 wavefunction error")
-    ax.set_title("Vv-only wavefunction reproduction")
-    ax.grid(axis="y", alpha=0.25)
+    fig, axes = plt.subplots(1, 2, figsize=(10.8, 3.8), dpi=140, sharex=True)
+    for ax, error_dict, ylabel in [
+        (axes[0], vv_relative_errors, "relative L2 wavefunction error"),
+        (axes[1], vv_absolute_errors, "absolute L2 wavefunction error"),
+    ]:
+        ax.boxplot(list(error_dict.values()), labels=list(error_dict.keys()), showfliers=False)
+        ax.set_yscale("log")
+        ax.set_ylabel(ylabel)
+        ax.grid(axis="y", alpha=0.25)
+    axes[0].set_title("Vv-only relative error")
+    axes[1].set_title("Vv-only absolute error")
+    for ax in axes:
+        ax.tick_params(axis="x", rotation=15)
     fig.tight_layout()
     """
     box_samples = r"""
@@ -334,25 +350,13 @@ def notebook_cells() -> list:
     print("Vv/Rv/av train wavefunctions:", phi_train_3d.shape)
     """
     box_plot = r"""
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), dpi=140)
+    fig, ax = plt.subplots(figsize=(7.0, 3.8), dpi=140)
     for alpha, potential in zip(train_samples_3d, potentials_3d):
-        axes[0].plot(problem_3d.r_mesh, potential, alpha=0.22)
-    axes[0].set_xlabel("r [fm]")
-    axes[0].set_ylabel("V(r)")
-    axes[0].set_title("Vv/Rv/av potential variation")
-    axes[0].grid(alpha=0.25)
-
-    scatter = axes[1].scatter(
-        train_samples_3d[:, 0],
-        train_samples_3d[:, 1],
-        c=train_samples_3d[:, 2],
-        s=24,
-    )
-    axes[1].set_xlabel("Vv")
-    axes[1].set_ylabel("Rv")
-    axes[1].set_title("Training samples colored by av")
-    axes[1].grid(alpha=0.25)
-    fig.colorbar(scatter, ax=axes[1], label="av")
+        ax.plot(problem_3d.r_mesh, potential, alpha=0.22)
+    ax.set_xlabel("r [fm]")
+    ax.set_ylabel("V(r)")
+    ax.set_title("Vv/Rv/av potential variation")
+    ax.grid(alpha=0.25)
     fig.tight_layout()
 
     pd.DataFrame(
@@ -462,32 +466,47 @@ def notebook_cells() -> list:
     )
     phi_rose_test_3d = np.array([rbe_3d.emulate_wave_function(alpha) for alpha in test_samples_3d])
 
-    comparison_3d = {
+    relative_errors_3d = {
         "LS floor": metrics.relative_l2_rows(phi_ls_test_3d, phi_test_3d),
         "ROSE/RBM": metrics.relative_l2_rows(phi_rose_test_3d, phi_test_3d),
         "raw-param LROM": metrics.relative_l2_rows(phi_raw_lrom_test, phi_test_3d),
         "potential-predictor LROM": metrics.relative_l2_rows(phi_pot_lrom_test, phi_test_3d),
     }
+    absolute_errors_3d = {
+        "LS floor": metrics.absolute_l2_rows(phi_ls_test_3d, phi_test_3d),
+        "ROSE/RBM": metrics.absolute_l2_rows(phi_rose_test_3d, phi_test_3d),
+        "raw-param LROM": metrics.absolute_l2_rows(phi_raw_lrom_test, phi_test_3d),
+        "potential-predictor LROM": metrics.absolute_l2_rows(phi_pot_lrom_test, phi_test_3d),
+    }
     comparison_summary_3d = pd.DataFrame(
         {
-            name: {
-                "median": np.median(values),
-                "p95": np.percentile(values, 95),
-                "max": np.max(values),
+            (metric, name): {
+                "median": np.median(error_values),
+                "p95": np.percentile(error_values, 95),
+                "max": np.max(error_values),
             }
-            for name, values in comparison_3d.items()
+            for metric, error_dict in {
+                "relative L2": relative_errors_3d,
+                "absolute L2": absolute_errors_3d,
+            }.items()
+            for name, error_values in error_dict.items()
         }
     ).T
     comparison_summary_3d
     """
     performance_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.4, 4.0), dpi=140)
-    ax.boxplot(list(comparison_3d.values()), labels=list(comparison_3d.keys()), showfliers=False)
-    ax.set_yscale("log")
-    ax.set_ylabel("relative L2 wavefunction error")
-    ax.set_title("Vv/Rv/av wavefunction reproduction")
-    ax.tick_params(axis="x", rotation=15)
-    ax.grid(axis="y", alpha=0.25)
+    fig, axes = plt.subplots(1, 2, figsize=(12.0, 4.0), dpi=140)
+    for ax, error_dict, ylabel in [
+        (axes[0], relative_errors_3d, "relative L2 wavefunction error"),
+        (axes[1], absolute_errors_3d, "absolute L2 wavefunction error"),
+    ]:
+        ax.boxplot(list(error_dict.values()), labels=list(error_dict.keys()), showfliers=False)
+        ax.set_yscale("log")
+        ax.set_ylabel(ylabel)
+        ax.tick_params(axis="x", rotation=18)
+        ax.grid(axis="y", alpha=0.25)
+    axes[0].set_title("Vv/Rv/av relative error")
+    axes[1].set_title("Vv/Rv/av absolute error")
     fig.tight_layout()
     """
     takeaway = r"""

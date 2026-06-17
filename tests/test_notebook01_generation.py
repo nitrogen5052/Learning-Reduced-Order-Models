@@ -104,7 +104,8 @@ def test_notebook01_source_uses_vv_rv_av_after_vv_only_section() -> None:
     assert "train_samples_3d[:, 2]" in source
     assert "test_samples_3d[:, 2]" in source
     assert 'name="notebook01_raw_vv_rv_av"' in source
-    assert "Vv/Rv/av wavefunction reproduction" in source
+    assert "Vv/Rv/av relative error" in source
+    assert "Vv/Rv/av absolute error" in source
 
 
 def test_notebook01_source_shows_transformed_lrom_equation_and_maxvol() -> None:
@@ -113,3 +114,23 @@ def test_notebook01_source_shows_transformed_lrom_equation_and_maxvol() -> None:
     assert r"(I + p_1 M_1 + \cdots + p_K M_K)a" in source
     assert "maxvol" in source.lower()
     assert "make_potential_predictor_pack" in source
+
+
+def test_notebook01_source_reports_absolute_and_relative_errors() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert "metrics.absolute_l2_rows" in source
+    assert "vv_relative_errors" in source
+    assert "vv_absolute_errors" in source
+    assert "relative_errors_3d" in source
+    assert "absolute_errors_3d" in source
+    assert "absolute L2 wavefunction error" in source
+    assert "relative L2 wavefunction error" in source
+
+
+def test_notebook01_source_removes_av_colored_training_scatter() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert "Training samples colored by av" not in source
+    assert "fig.colorbar(scatter" not in source
+    assert "axes[1].scatter(" not in source
