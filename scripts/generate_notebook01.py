@@ -18,6 +18,20 @@ def code(text: str):
     return nbf.v4.new_code_cell(textwrap.dedent(text).strip())
 
 
+def repo_bootstrap_source() -> str:
+    return textwrap.dedent(
+        """
+        ROOT = next(
+            candidate
+            for candidate in (Path.cwd(), *Path.cwd().parents)
+            if (candidate / "lrom_bench").is_dir()
+        )
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        """
+    ).strip()
+
+
 def write_notebook(path: Path, cells: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     nb = nbf.v4.new_notebook()
@@ -32,28 +46,28 @@ def write_notebook(path: Path, cells: list) -> None:
 
 
 def notebook_cells() -> list:
-    setup = r"""
-    from pathlib import Path
-    import sys
-
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import pandas as pd
-
-    ROOT = Path.cwd()
-    if str(ROOT) not in sys.path:
-        sys.path.insert(0, str(ROOT))
-
-    from lrom_bench.config import Notebook01Config
-    from lrom_bench import metrics, prediction, predictors, reduced_basis, rf_lrom, rose_fom, sampling
-
-    cfg = Notebook01Config()
-    params = rose_fom.central_real_ws_parameters()
-    alpha_c = params.alpha
-
-    print("config hash:", cfg.config_hash())
-    print("central [Vv, Rv, av]:", alpha_c)
-    """
+    setup = "\n".join(
+        [
+            "from pathlib import Path",
+            "import sys",
+            "",
+            "import matplotlib.pyplot as plt",
+            "import numpy as np",
+            "import pandas as pd",
+            "",
+            repo_bootstrap_source(),
+            "",
+            "from lrom_bench.config import Notebook01Config",
+            "from lrom_bench import metrics, prediction, predictors, reduced_basis, rf_lrom, rose_fom, sampling",
+            "",
+            "cfg = Notebook01Config()",
+            "params = rose_fom.central_real_ws_parameters()",
+            "alpha_c = params.alpha",
+            "",
+            'print("config hash:", cfg.config_hash())',
+            'print("central [Vv, Rv, av]:", alpha_c)',
+        ]
+    )
     vv_samples = r"""
     vv_train = sampling.centered_1d_values(alpha_c[0], cfg.vv_width, cfg.n_vv_train)
     vv_test = sampling.centered_1d_values(alpha_c[0], cfg.vv_width, cfg.n_vv_test)

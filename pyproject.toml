@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "lrom-bench"
 version = "0.1.0"
 description = "Research benchmark package for LROM notebook parity"
-requires-python = ">=3.11"
+requires-python = ">=3.10,<3.12"
 dependencies = [
   "numpy",
   "scipy",
@@ -14,6 +14,7 @@ dependencies = [
   "pandas",
   "nbformat",
   "nbclient",
+  "numba",
   "nuclear-rose>=1.1.7",
 ]
 
