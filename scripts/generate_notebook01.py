@@ -69,8 +69,16 @@ def notebook_cells() -> list:
         ]
     )
     vv_samples = r"""
-    vv_train = sampling.centered_1d_values(alpha_c[0], cfg.vv_width, cfg.n_vv_train)
-    vv_test = sampling.centered_1d_values(alpha_c[0], cfg.vv_width, cfg.n_vv_test)
+    vv_train = np.linspace(
+        (1.0 - cfg.vv_train_fraction) * alpha_c[0],
+        (1.0 + cfg.vv_train_fraction) * alpha_c[0],
+        cfg.n_vv_train,
+    )
+    vv_test = np.linspace(
+        (1.0 - cfg.vv_test_fraction) * alpha_c[0],
+        (1.0 + cfg.vv_test_fraction) * alpha_c[0],
+        cfg.n_vv_test,
+    )
 
     train_alphas = rose_fom.make_alphas(alpha_c, param_index=0, values=vv_train)
     test_alphas = rose_fom.make_alphas(alpha_c, param_index=0, values=vv_test)
@@ -160,12 +168,12 @@ def notebook_cells() -> list:
     p_train_vv = predictors.centered_parameter_predictors(
         samples=vv_train[:, None],
         center=np.array([alpha_c[0]]),
-        scales=np.array([cfg.vv_width]),
+        scales=np.array([cfg.vv_train_fraction * alpha_c[0]]),
     )
     p_test_vv = predictors.centered_parameter_predictors(
         samples=vv_test[:, None],
         center=np.array([alpha_c[0]]),
-        scales=np.array([cfg.vv_width]),
+        scales=np.array([cfg.vv_train_fraction * alpha_c[0]]),
     )
 
     coeff_rose_train_vv = np.array([rbe_vv.coefficients(alpha) for alpha in train_alphas])
@@ -230,21 +238,32 @@ def notebook_cells() -> list:
     fig.tight_layout()
     """
     box_samples = r"""
-    widths = np.array([cfg.vv_width, cfg.rv_width, cfg.av_width])
-    train_samples_3d = sampling.centered_box_samples(
-        center=alpha_c,
-        widths=widths,
-        n_samples=cfg.n_box_train,
-        seed=cfg.seed_train,
-        include_center=True,
+    V0, R0, a0 = alpha_c
+    broad_center = np.array([V0, R0, a0])
+    broad_scales = np.array([
+        cfg.broad_vv_train_fraction * V0,
+        cfg.broad_rv_train_fraction * R0,
+        1.0,
+    ])
+
+    rng_broad = np.random.default_rng(cfg.seed_train)
+    train_samples_3d = np.tile(broad_center, (cfg.n_box_train, 1))
+    train_samples_3d[:, 0] += rng_broad.uniform(-1.0, 1.0, cfg.n_box_train) * broad_scales[0]
+    train_samples_3d[:, 1] += rng_broad.uniform(-1.0, 1.0, cfg.n_box_train) * broad_scales[1]
+
+    vv_scan = np.tile(broad_center, (cfg.n_box_test, 1))
+    vv_scan[:, 0] = np.linspace(
+        (1.0 - cfg.broad_vv_scan_fraction) * V0,
+        (1.0 + cfg.broad_vv_scan_fraction) * V0,
+        cfg.n_box_test,
     )
-    test_samples_3d = sampling.centered_box_samples(
-        center=alpha_c,
-        widths=widths,
-        n_samples=cfg.n_box_test,
-        seed=cfg.seed_test,
-        include_center=True,
+    rv_scan = np.tile(broad_center, (cfg.n_box_test, 1))
+    rv_scan[:, 1] = np.linspace(
+        (1.0 - cfg.broad_rv_scan_fraction) * R0,
+        (1.0 + cfg.broad_rv_scan_fraction) * R0,
+        cfg.n_box_test,
     )
+    test_samples_3d = np.vstack([vv_scan, rv_scan])
     problem_3d = rose_fom.make_real_ws_problem(
         params=params,
         train_alphas=train_samples_3d,
@@ -259,7 +278,7 @@ def notebook_cells() -> list:
         [problem_3d.potential(problem_3d.r_mesh, alpha) for alpha in train_samples_3d]
     )
 
-    print("three-parameter train wavefunctions:", phi_train_3d.shape)
+    print("legacy broad Vv/Rv train wavefunctions:", phi_train_3d.shape)
     """
     box_plot = r"""
     fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), dpi=140)
@@ -267,13 +286,13 @@ def notebook_cells() -> list:
         axes[0].plot(problem_3d.r_mesh, potential, alpha=0.22)
     axes[0].set_xlabel("r [fm]")
     axes[0].set_ylabel("V(r)")
-    axes[0].set_title("Vv/Rv/av potential variation")
+    axes[0].set_title("Legacy broad Vv/Rv potential variation")
     axes[0].grid(alpha=0.25)
 
-    axes[1].scatter(train_samples_3d[:, 1], train_samples_3d[:, 2], c=train_samples_3d[:, 0], s=24)
-    axes[1].set_xlabel("Rv")
-    axes[1].set_ylabel("av")
-    axes[1].set_title("Training samples colored by Vv")
+    axes[1].scatter(train_samples_3d[:, 0], train_samples_3d[:, 1], s=24)
+    axes[1].set_xlabel("Vv")
+    axes[1].set_ylabel("Rv")
+    axes[1].set_title("Legacy broad training box; av fixed")
     axes[1].grid(alpha=0.25)
     fig.tight_layout()
     """
@@ -293,10 +312,18 @@ def notebook_cells() -> list:
     coeff_ls_train_3d = reduced_basis.project_ls_coordinates(basis_3d, phi_train_3d)
     coeff_ls_test_3d = reduced_basis.project_ls_coordinates(basis_3d, phi_test_3d)
 
-    raw_p_train = predictors.centered_parameter_predictors(train_samples_3d, alpha_c, widths)
-    raw_p_test = predictors.centered_parameter_predictors(test_samples_3d, alpha_c, widths)
+    raw_p_train = predictors.centered_parameter_predictors(
+        train_samples_3d[:, :2],
+        broad_center[:2],
+        broad_scales[:2],
+    )
+    raw_p_test = predictors.centered_parameter_predictors(
+        test_samples_3d[:, :2],
+        broad_center[:2],
+        broad_scales[:2],
+    )
     raw_lrom = rf_lrom.fit_central_lrom(
-        name="notebook01_raw_vv_rv_av",
+        name="notebook01_raw_vv_rv_legacy",
         predictors=raw_p_train,
         coeff_targets=coeff_ls_train_3d,
     )
@@ -387,7 +414,7 @@ def notebook_cells() -> list:
     ax.boxplot(list(comparison_3d.values()), labels=list(comparison_3d.keys()), showfliers=False)
     ax.set_yscale("log")
     ax.set_ylabel("relative L2 wavefunction error")
-    ax.set_title("Three-parameter wavefunction reproduction")
+    ax.set_title("Legacy broad Vv/Rv wavefunction reproduction")
     ax.tick_params(axis="x", rotation=15)
     ax.grid(axis="y", alpha=0.25)
     fig.tight_layout()
@@ -396,7 +423,7 @@ def notebook_cells() -> list:
     pd.concat(
         {
             "Vv-only": vv_error_summary,
-            "Vv/Rv/av": comparison_summary_3d,
+            "Vv/Rv legacy broad box": comparison_summary_3d,
         },
         axis=0,
     )
@@ -406,9 +433,11 @@ def notebook_cells() -> list:
             """
             # 01. RBM vs LROM for a Single Scattering Wavefunction
 
-            This notebook compares a traditional reduced-basis view and the RF-LROM view for one `l = 0`
-            real Woods-Saxon scattering wavefunction. The first act varies only `Vv`; the second act expands
-            to `Vv`, `Rv`, and `av` to motivate operator-informed predictors.
+            This notebook compares a traditional reduced-basis view and the RF-LROM view for the `l = 0`
+            real Woods-Saxon scattering wavefunction from the legacy `40Ca(n,n)` benchmark. The ROSE
+            interaction space is initialized with `l_max = 1`, as in the legacy notebook. The first act
+            varies only `Vv`; the second act expands to the legacy broad `Vv/Rv` stress test with `av`
+            fixed at its central Koning-Delaroche value.
             """
         ),
         md("## 1. Scientific Setup"),
@@ -426,7 +455,7 @@ def notebook_cells() -> list:
         md("## 5. Wavefunction Reproduction"),
         code(vv_wave_errors),
         code(vv_wave_error_plot),
-        md("## 6. Three-Parameter Samples"),
+        md("## 6. Legacy Broad Vv/Rv Samples"),
         code(box_samples),
         code(box_plot),
         md("## 7. Why Raw Parameters Are Not Enough"),
@@ -434,7 +463,7 @@ def notebook_cells() -> list:
         md("## 8. Operator-Informed Potential Predictors"),
         code(potential_predictors),
         code(predictor_plot),
-        md("## 9. Three-Parameter Performance"),
+        md("## 9. Legacy Broad Vv/Rv Performance"),
         code(performance),
         code(performance_plot),
         md("## 10. Notebook 1 Takeaways"),
