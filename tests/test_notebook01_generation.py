@@ -45,15 +45,62 @@ def test_notebook01_setup_cell_uses_repo_bootstrap_source() -> None:
     compile(setup_cell["source"], "notebook01 setup cell", "exec")
 
 
-def test_notebook01_source_keeps_legacy_broad_vv_rv_setup_visible() -> None:
+def test_notebook01_source_has_requested_three_section_spine() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert "## Section 1. Parameter Varying Vv" in source
+    assert "## Section 2. Three-Parameter LROM Equation And Predictor Selection" in source
+    assert "## Section 3. Three-Parameter Wavefunction Emulation Results" in source
+    assert "Why this section matters" in source
+    assert source.index("## Section 1. Parameter Varying Vv") < source.index(
+        "## Section 2. Three-Parameter LROM Equation And Predictor Selection"
+    )
+    assert source.index("## Section 2. Three-Parameter LROM Equation And Predictor Selection") < source.index(
+        "## Section 3. Three-Parameter Wavefunction Emulation Results"
+    )
+
+
+def test_notebook01_source_includes_inputs_and_legacy_comparison() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert "Notebook Inputs And Legacy Comparison" in source
+    assert "Legacy Notebook 1" in source
+    assert "Legacy Notebook 2" in source
+    assert "40Ca(n,n)" in source
+    assert "Vv/Rv/av" in source
+    assert "n_basis" in source
+    assert "n_U" in source
+    assert "n_mesh" in source
+    assert "n_predictors" in source
+
+
+def test_notebook01_source_keeps_vv_scan_and_train_test_coefficients_visible() -> None:
     source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
 
     assert "(1.0 - cfg.vv_train_fraction) * alpha_c[0]" in source
     assert "(1.0 + cfg.vv_test_fraction) * alpha_c[0]" in source
-    assert "cfg.broad_vv_train_fraction * V0" in source
-    assert "cfg.broad_rv_train_fraction * R0" in source
-    assert "(1.0 - cfg.broad_vv_scan_fraction) * V0" in source
-    assert "(1.0 + cfg.broad_vv_scan_fraction) * V0" in source
-    assert "(1.0 - cfg.broad_rv_scan_fraction) * R0" in source
-    assert "(1.0 + cfg.broad_rv_scan_fraction) * R0" in source
-    assert "Legacy Broad Vv/Rv Samples" in source
+    assert "ax.scatter(vv_train" in source
+    assert "coeff_ls_train_vv" in source
+    assert "coeff_rose_train_vv" in source
+    assert "training LS" in source
+    assert "testing LS" in source
+
+
+def test_notebook01_source_uses_vv_rv_av_after_vv_only_section() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert "cfg.vv_3d_fraction * V0" in source
+    assert "cfg.rv_3d_fraction * R0" in source
+    assert "cfg.av_3d_fraction * a0" in source
+    assert "train_samples_3d[:, 2]" in source
+    assert "test_samples_3d[:, 2]" in source
+    assert 'name="notebook01_raw_vv_rv_av"' in source
+    assert "Vv/Rv/av wavefunction reproduction" in source
+
+
+def test_notebook01_source_shows_transformed_lrom_equation_and_maxvol() -> None:
+    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+
+    assert r"(I + p_1 M_1 + \cdots + p_K M_K)a" in source
+    assert "maxvol" in source.lower()
+    assert "make_potential_predictor_pack" in source
