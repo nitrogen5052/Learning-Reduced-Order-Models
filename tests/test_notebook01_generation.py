@@ -45,6 +45,15 @@ def test_notebook01_setup_cell_uses_repo_bootstrap_source() -> None:
     compile(setup_cell["source"], "notebook01 setup cell", "exec")
 
 
+def test_notebook01_setup_cell_clears_stale_lrom_bench_modules() -> None:
+    setup_cell = generate_notebook01.notebook_cells()[2]
+
+    assert "list(sys.modules)" in setup_cell["source"]
+    assert 'name == "lrom_bench"' in setup_cell["source"]
+    assert 'name.startswith("lrom_bench.")' in setup_cell["source"]
+    assert "del sys.modules[name]" in setup_cell["source"]
+
+
 def test_notebook01_source_has_requested_three_section_spine() -> None:
     source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
 
