@@ -6,10 +6,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_python_version_window_is_310_to_311() -> None:
+def test_python_version_window_is_311_to_313() -> None:
     text = (ROOT / "pyproject.toml").read_text()
 
-    assert 'requires-python = ">=3.10,<3.12"' in text
+    assert 'requires-python = ">=3.11,<3.14"' in text
+
+
+def test_project_is_named_lrom() -> None:
+    text = (ROOT / "pyproject.toml").read_text()
+
+    assert 'name = "lrom"' in text
 
 
 def test_runtime_dependencies_are_declared() -> None:

@@ -3,10 +3,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lrom-bench"
+name = "lrom"
 version = "0.1.0"
 description = "Research benchmark package for LROM notebook parity"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "numpy",
   "scipy",
@@ -23,7 +23,7 @@ test = ["pytest"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lrom_bench*"]
+include = ["lrom*", "lrom_bench*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
