@@ -32,3 +32,32 @@ def test_runtime_dependencies_are_declared() -> None:
         "numba",
     ]:
         assert f'"{dependency}"' in text
+
+
+def test_package_discovery_includes_new_and_legacy_namespaces() -> None:
+    text = (ROOT / "pyproject.toml").read_text()
+
+    assert 'include = ["lrom*", "lrom_bench*"]' in text
+
+
+def test_readme_documents_canonical_portable_workflow() -> None:
+    text = (ROOT / "README.md").read_text()
+
+    for snippet in (
+        "import lrom",
+        "emulator = lrom.LROM(",
+        "emulator.sampling(",
+        "emulator.train(",
+        "emulator.save(",
+        "portable = lrom.load(",
+        "portable.predict(",
+    ):
+        assert snippet in text
+
+
+def test_ci_covers_supported_python_versions() -> None:
+    text = (ROOT / ".github" / "workflows" / "test.yml").read_text()
+
+    assert 'python-version: ["3.11", "3.12", "3.13"]' in text
+    assert "pip install -e .[test]" in text
+    assert "pytest -q" in text
