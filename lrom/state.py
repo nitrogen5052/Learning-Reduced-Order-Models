@@ -93,3 +93,31 @@ class TrainingState:
     rose_rbm: Mapping[int, Any]
     testing_results: Any
     testing_errors: Mapping[int, Any]
+
+
+@dataclass(frozen=True)
+class BasisState:
+    """One central-reference reduced basis and its spectrum."""
+
+    phi0: np.ndarray
+    vectors: np.ndarray
+    radius: np.ndarray
+    singular_values: np.ndarray
+
+    def __post_init__(self) -> None:
+        phi0 = np.asarray(self.phi0, dtype=np.complex128)
+        vectors = np.asarray(self.vectors, dtype=np.complex128)
+        radius = np.asarray(self.radius, dtype=float)
+        singular_values = np.asarray(self.singular_values, dtype=float)
+        if phi0.ndim != 1 or radius.shape != phi0.shape:
+            raise ValueError("phi0 and radius must be one-dimensional with equal size")
+        if vectors.ndim != 2 or vectors.shape[0] != phi0.size:
+            raise ValueError("basis vectors must have shape (mesh_size, basis_size)")
+        object.__setattr__(self, "phi0", phi0)
+        object.__setattr__(self, "vectors", vectors)
+        object.__setattr__(self, "radius", radius)
+        object.__setattr__(self, "singular_values", singular_values)
+
+    @property
+    def basis_size(self) -> int:
+        return int(self.vectors.shape[1])
