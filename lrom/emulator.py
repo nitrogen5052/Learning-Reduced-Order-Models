@@ -10,7 +10,7 @@ from .config import LROMConfig
 from .errors import LROMStateError
 from .potentials import PotentialFunction
 from .sampling import create_sampling_design
-from .state import Kinematics, MeshState, SamplingState, TrainingState
+from .state import Kinematics, MeshState, SamplingState, TestingCase, TrainingState
 
 
 class LROM:
@@ -235,6 +235,27 @@ class LROM:
         from .training import predict
 
         self._prediction_state = predict(emulator=self, parameters=parameters)
+
+    def testing_case(self, *, case_id: str) -> TestingCase:
+        if self._training_state is None or self._sampling_state is None:
+            raise LROMStateError("call train() before requesting a testing case")
+        try:
+            index = self._sampling_state.design.testing.case_ids.index(case_id)
+        except ValueError as exc:
+            raise LROMStateError(f"unknown testing case_id {case_id!r}") from exc
+        results = self._training_state.testing_results
+        return TestingCase(
+            case_id=case_id,
+            parameters=self._sampling_state.design.testing.named(index=index),
+            radius=self._sampling_state.mesh.radius,
+            high_fidelity={
+                channel: values[index]
+                for channel, values in results.high_fidelity.items()
+            },
+            rose={channel: values[index] for channel, values in results.rose.items()},
+            lrom={channel: values[index] for channel, values in results.lrom.items()},
+            ls={channel: values[index] for channel, values in results.ls.items()},
+        )
 
     def save(self, *, path: str | Path) -> None:
         if not self.can_predict:

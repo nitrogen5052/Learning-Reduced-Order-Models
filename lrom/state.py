@@ -79,7 +79,9 @@ class SamplingState:
     central_wavefunctions: Mapping[int, np.ndarray]
     training_wavefunctions: Mapping[int, np.ndarray]
     testing_wavefunctions: Mapping[int, np.ndarray]
+    central_potential: np.ndarray
     training_potentials: np.ndarray
+    testing_potentials: np.ndarray
     full_order_models: Mapping[int, Any]
 
 
@@ -121,3 +123,47 @@ class BasisState:
     @property
     def basis_size(self) -> int:
         return int(self.vectors.shape[1])
+
+
+@dataclass(frozen=True)
+class RoseRBMState:
+    """Live ROSE emulator sharing one authoritative reduced basis."""
+
+    basis: BasisState
+    custom_basis: Any
+    emulator: Any
+
+
+@dataclass(frozen=True)
+class TestingResults:
+    """Testing-set wavefunctions produced by every approved method."""
+
+    high_fidelity: Mapping[int, np.ndarray]
+    rose: Mapping[int, np.ndarray]
+    lrom: Mapping[int, np.ndarray]
+    ls: Mapping[int, np.ndarray]
+    coefficients: Mapping[str, Mapping[int, np.ndarray]]
+    metrics: Mapping[str, Mapping[int, Mapping[str, np.ndarray]]]
+
+
+@dataclass(frozen=True)
+class PredictionState:
+    """Most recent named-parameter inference batch."""
+
+    parameter_names: tuple[str, ...]
+    parameters: np.ndarray
+    coefficients: Mapping[int, np.ndarray]
+    wavefunctions: Mapping[int, np.ndarray]
+
+
+@dataclass(frozen=True)
+class TestingCase:
+    """One testing case gathered across all comparison methods."""
+
+    case_id: str
+    parameters: Mapping[str, float]
+    radius: np.ndarray
+    high_fidelity: Mapping[int, np.ndarray]
+    rose: Mapping[int, np.ndarray]
+    lrom: Mapping[int, np.ndarray]
+    ls: Mapping[int, np.ndarray]

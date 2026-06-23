@@ -33,5 +33,7 @@ def test_nuclear_scattering_fom_samples_l0_real_ws() -> None:
     assert emulator.samples.training_wavefunctions[0].shape == (3, 64)
     assert emulator.samples.testing_wavefunctions[0].shape == (3, 64)
     assert emulator.samples.training_potentials.shape == (3, 64)
+    assert emulator.samples.testing_potentials.shape == (3, 64)
+    assert emulator.samples.central_potential.shape == (64,)
     assert set(emulator.central_parameters) == {"Vv", "Rv", "av"}
     assert set(emulator.full_order_model) == {0}

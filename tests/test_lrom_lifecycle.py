@@ -55,7 +55,9 @@ class FakeFOMProvider:
             central_wavefunctions=central_wavefunctions,
             training_wavefunctions=training_wavefunctions,
             testing_wavefunctions=testing_wavefunctions,
+            central_potential=np.zeros(mesh_size),
             training_potentials=np.zeros((len(design.training.case_ids), mesh_size)),
+            testing_potentials=np.zeros((len(design.testing.case_ids), mesh_size)),
             full_order_models={channel: f"fom-{channel}" for channel in config.channels},
         )
 

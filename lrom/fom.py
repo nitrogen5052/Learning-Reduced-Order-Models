@@ -217,8 +217,14 @@ class NuclearScatteringFOM:
         }
         if potential_function is None:
             raise LROMSamplingError("selected potential cannot be evaluated")
+        central_potential = np.asarray(
+            potential_function(radius_mesh, central_vector)
+        )
         training_potentials = np.asarray(
             [potential_function(radius_mesh, row) for row in design.training.values]
+        )
+        testing_potentials = np.asarray(
+            [potential_function(radius_mesh, row) for row in design.testing.values]
         )
         return SamplingState(
             design=design,
@@ -228,6 +234,8 @@ class NuclearScatteringFOM:
             central_wavefunctions=central_wavefunctions,
             training_wavefunctions=training_wavefunctions,
             testing_wavefunctions=testing_wavefunctions,
+            central_potential=central_potential,
             training_potentials=training_potentials,
+            testing_potentials=testing_potentials,
             full_order_models=full_order_models,
         )
