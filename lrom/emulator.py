@@ -53,10 +53,12 @@ class LROM:
 
     @property
     def kinematics(self) -> Kinematics | None:
+        self._ensure_physics_state()
         return self._kinematics
 
     @property
     def central_parameters(self) -> Mapping[str, float]:
+        self._ensure_physics_state()
         return self._central_parameters
 
     @property
@@ -143,6 +145,13 @@ class LROM:
 
             self._fom_provider = NuclearScatteringFOM()
         return self._fom_provider
+
+    def _ensure_physics_state(self) -> None:
+        if self._kinematics is not None:
+            return
+        central, kinematics = self._provider().resolve(config=self._config)
+        self._central_parameters = central
+        self._kinematics = kinematics
 
     def _trainer(self) -> Any:
         if self._training_engine is None:

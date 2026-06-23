@@ -111,6 +111,14 @@ def test_constructor_exposes_normalized_configuration() -> None:
     assert not emulator.can_predict
 
 
+def test_central_parameters_resolve_before_sampling() -> None:
+    emulator = make_emulator()
+
+    assert emulator.central_parameters == {"Vv": 50.0, "Rv": 4.0, "av": 0.65}
+    assert emulator.kinematics is not None
+    assert not emulator.is_sampled
+
+
 def test_train_before_sampling_is_rejected() -> None:
     emulator = make_emulator()
 
