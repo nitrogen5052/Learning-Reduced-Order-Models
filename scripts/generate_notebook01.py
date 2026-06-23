@@ -24,7 +24,7 @@ def repo_bootstrap_source() -> str:
         ROOT = next(
             candidate
             for candidate in (Path.cwd(), *Path.cwd().parents)
-            if (candidate / "lrom_bench").is_dir()
+            if (candidate / "lrom").is_dir()
         )
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
@@ -34,15 +34,19 @@ def repo_bootstrap_source() -> str:
 
 def write_notebook(path: Path, cells: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    nb = nbf.v4.new_notebook()
-    for idx, cell in enumerate(cells):
-        cell["id"] = f"notebook01-{idx:02d}"
-    nb["cells"] = cells
-    nb["metadata"] = {
-        "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+    notebook = nbf.v4.new_notebook()
+    for index, cell in enumerate(cells):
+        cell["id"] = f"notebook01-{index:02d}"
+    notebook["cells"] = cells
+    notebook["metadata"] = {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3",
+        },
         "language_info": {"name": "python", "pygments_lexer": "ipython3"},
     }
-    nbf.write(nb, path)
+    nbf.write(notebook, path)
 
 
 def notebook_cells() -> list:
@@ -58,604 +62,337 @@ def notebook_cells() -> list:
             repo_bootstrap_source(),
             "",
             "for name in list(sys.modules):",
-            '    if name == "lrom_bench" or name.startswith("lrom_bench."):',
+            '    if name == "lrom" or name.startswith("lrom."):',
             "        del sys.modules[name]",
             "",
-            "from lrom_bench.config import Notebook01Config",
-            "from lrom_bench import metrics, prediction, predictors, reduced_basis, rf_lrom, rose_fom, sampling",
+            "import lrom",
             "",
-            "cfg = Notebook01Config()",
-            "params = rose_fom.central_real_ws_parameters()",
-            "alpha_c = params.alpha",
-            "",
-            'print("config hash:", cfg.config_hash())',
-            'print("central [Vv, Rv, av]:", alpha_c)',
+            'plt.rcParams["figure.dpi"] = 130',
+            'plt.rcParams["axes.grid"] = True',
+            'plt.rcParams["grid.alpha"] = 0.25',
         ]
     )
-    input_table = r"""
-    input_rows = [
-        {
-            "source": "This Notebook 1",
-            "physics": "40Ca(n,n), real Woods-Saxon Vv/Rv/av",
-            "projectile / target": f"({cfg.projectile_a}, {cfg.projectile_z}) on ({cfg.target_a}, {cfg.target_z})",
-            "E_lab [MeV]": cfg.e_lab,
-            "channel shown": "l=0 wavefunction",
-            "ROSE interaction": f"EIM, l_max={cfg.l}, n_U={cfg.n_u}",
-            "basis": f"central CustomBasis, n_basis={cfg.n_basis}",
-            "mesh": f"n_mesh={cfg.n_mesh}, rho in [1e-8, 8*pi]",
-            "training ranges": (
-                f"Vv +/- {100 * cfg.vv_3d_fraction:.0f}%, "
-                f"Rv +/- {100 * cfg.rv_3d_fraction:.0f}%, "
-                f"av +/- {100 * cfg.av_3d_fraction:.0f}%"
-            ),
-            "train / test": f"{cfg.n_box_train} / {cfg.n_box_test}",
-            "predictors": f"K={cfg.n_predictors} maxvol potential samples",
-        },
-        {
-            "source": "Legacy Notebook 1",
-            "physics": "40Ca(n,n), full KD optical-potential ROSE emulator",
-            "projectile / target": "(1, 0) on (40, 20)",
-            "E_lab [MeV]": 14.1,
-            "channel shown": "l=0 diagnostics inside a larger scattering emulator",
-            "ROSE interaction": "EIM, larger l_max for cross-section context",
-            "basis": "ROSE ScatteringAmplitudeEmulator basis",
-            "mesh": "publication-quality examples may increase n_mesh",
-            "training ranges": "Latin-hypercube KD parameter variation",
-            "train / test": "larger ROSE benchmark sample counts",
-            "predictors": "not an RF-LROM predictor-selection notebook",
-        },
-        {
-            "source": "Legacy Notebook 2",
-            "physics": "40Ca(n,n), real Woods-Saxon teaching benchmark",
-            "projectile / target": "(1, 0) on (40, 20)",
-            "E_lab [MeV]": 14.1,
-            "channel shown": "l=0 wavefunction",
-            "ROSE interaction": "EIM, l_max=1, n_U=8",
-            "basis": "n_phi=4 central and ROSE reduced bases",
-            "mesh": "n_mesh=800",
-            "training ranges": "Vv-only, Rv-only, then broad Vv/Rv predictor stress test",
-            "train / test": "35/41 for one-parameter scans; 70 train for broad box",
-            "predictors": "maxvol-style potential predictors",
-        },
-    ]
-    input_comparison = pd.DataFrame(input_rows)
-    input_comparison
-    """
-    vv_samples = r"""
-    vv_train = np.linspace(
-        (1.0 - cfg.vv_train_fraction) * alpha_c[0],
-        (1.0 + cfg.vv_train_fraction) * alpha_c[0],
-        cfg.n_vv_train,
-    )
-    vv_test = np.linspace(
-        (1.0 - cfg.vv_test_fraction) * alpha_c[0],
-        (1.0 + cfg.vv_test_fraction) * alpha_c[0],
-        cfg.n_vv_test,
-    )
 
-    train_alphas = rose_fom.make_alphas(alpha_c, param_index=0, values=vv_train)
-    test_alphas = rose_fom.make_alphas(alpha_c, param_index=0, values=vv_test)
-
-    problem_vv = rose_fom.make_real_ws_problem(
-        params=params,
-        train_alphas=train_alphas,
-        n_u=cfg.n_u,
-        l_max=cfg.l,
-        n_mesh=cfg.n_mesh,
-    )
-    phi0_vv = problem_vv.solve_phi(alpha_c)
-    phi_train_vv = problem_vv.solve_wavefunctions(train_alphas)
-    phi_test_vv = problem_vv.solve_wavefunctions(test_alphas)
-    potentials_train = np.array(
-        [problem_vv.potential(problem_vv.r_mesh, alpha) for alpha in train_alphas]
-    )
-
-    print("Vv train wavefunctions:", phi_train_vv.shape)
-    """
-    vv_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.0, 4.0), dpi=140)
-    for value, potential in zip(vv_train, potentials_train):
-        label = f"{value:.1f}" if value in vv_train[[0, -1]] else None
-        ax.plot(problem_vv.r_mesh, potential, alpha=0.55, label=label)
-    ax.set_xlabel("r [fm]")
-    ax.set_ylabel("V(r)")
-    ax.set_title("Real Woods-Saxon potential rainbow: Vv-only scan")
-    ax.grid(alpha=0.25)
-    ax.legend(title="Vv edge values")
-    fig.tight_layout()
-    """
-    vv_wave_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.0, 4.0), dpi=140)
-    for value, phi in zip(vv_train, phi_train_vv):
-        label = f"{value:.1f}" if value in vv_train[[0, -1]] else None
-        ax.plot(problem_vv.r_mesh, phi.real, alpha=0.55, label=label)
-    ax.set_xlabel("r [fm]")
-    ax.set_ylabel("Re phi(r)")
-    ax.set_title("FOM wavefunction rainbow: Vv-only scan")
-    ax.grid(alpha=0.25)
-    ax.legend(title="Vv edge values")
-    fig.tight_layout()
-    """
-    vv_basis = r"""
-    custom_basis_vv = rose_fom.make_real_ws_custom_basis(
-        problem=problem_vv,
-        phi0=phi0_vv,
-        wavefunctions=phi_train_vv,
-        n_basis=cfg.n_basis,
-    )
-    rbe_vv = rose_fom.make_real_ws_rbe(problem=problem_vv, custom_basis=custom_basis_vv)
-    basis_vv = reduced_basis.CentralBasisData(
-        phi0=custom_basis_vv.phi_0,
-        vectors=custom_basis_vv.vectors,
-        mesh=problem_vv.rho_mesh,
-    )
-
-    coeff_ls_train_vv = reduced_basis.project_ls_coordinates(basis_vv, phi_train_vv)
-    coeff_ls_test_vv = reduced_basis.project_ls_coordinates(basis_vv, phi_test_vv)
-    phi_ls_test_vv = prediction.reconstruct_from_basis(
-        basis_vv.phi0,
-        basis_vv.vectors,
-        coeff_ls_test_vv,
-    )
-    ls_error_vv = metrics.relative_l2_rows(phi_ls_test_vv, phi_test_vv)
-
-    print("basis shape:", basis_vv.vectors.shape)
-    print("median LS-floor error:", np.median(ls_error_vv))
-    """
-    vv_basis_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.0, 4.0), dpi=140)
-    ax.plot(problem_vv.r_mesh, basis_vv.phi0.real, color="black", alpha=0.35, label="phi0")
-    display_height = 0.65 * np.max(np.abs(basis_vv.phi0.real))
-    for idx in range(min(4, basis_vv.n_basis)):
-        vec = basis_vv.vectors[:, idx].real
-        scale = display_height / max(np.max(np.abs(vec)), 1e-14)
-        ax.plot(problem_vv.r_mesh, scale * vec, label=f"basis {idx + 1} x {scale:.1f}")
-    ax.set_xlabel("r [fm]")
-    ax.set_ylabel("display-scaled real component")
-    ax.set_title("Central-reference basis for the Vv-only case")
-    ax.grid(alpha=0.25)
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    """
-    vv_lrom = r"""
-    p_train_vv = predictors.centered_parameter_predictors(
-        samples=vv_train[:, None],
-        center=np.array([alpha_c[0]]),
-        scales=np.array([cfg.vv_train_fraction * alpha_c[0]]),
-    )
-    p_test_vv = predictors.centered_parameter_predictors(
-        samples=vv_test[:, None],
-        center=np.array([alpha_c[0]]),
-        scales=np.array([cfg.vv_train_fraction * alpha_c[0]]),
-    )
-
-    coeff_rose_train_vv = np.array([rbe_vv.coefficients(alpha) for alpha in train_alphas])
-    coeff_rose_test_vv = np.array([rbe_vv.coefficients(alpha) for alpha in test_alphas])
-
-    lrom_vv = rf_lrom.fit_central_lrom(
-        name="notebook01_vv_only",
-        predictors=p_train_vv,
-        coeff_targets=coeff_ls_train_vv,
-    )
-    coeff_lrom_train_vv = prediction.predict_coefficients(lrom_vv, p_train_vv)
-    coeff_lrom_test_vv = prediction.predict_coefficients(lrom_vv, p_test_vv)
-
-    print("LROM parameters:", lrom_vv.n_complex_parameters)
-    print("residual MSE:", lrom_vv.residual_mse)
-    """
-    vv_coeff_plot = r"""
-    fig, axes = plt.subplots(min(2, cfg.n_basis), 1, figsize=(7.0, 4.8), dpi=140, sharex=True)
-    axes = np.atleast_1d(axes)
-    for idx, ax in enumerate(axes):
-        ax.scatter(vv_train, coeff_ls_train_vv[:, idx].real, s=18, alpha=0.75, label="training LS")
-        ax.scatter(vv_train, coeff_rose_train_vv[:, idx].real, s=14, marker="x", alpha=0.75, label="training ROSE/RBM")
-        ax.plot(vv_train, coeff_lrom_train_vv[:, idx].real, ".", alpha=0.75, label="training LROM")
-        ax.plot(vv_test, coeff_ls_test_vv[:, idx].real, label="testing LS")
-        ax.plot(vv_test, coeff_rose_test_vv[:, idx].real, "--", label="testing ROSE/RBM")
-        ax.plot(vv_test, coeff_lrom_test_vv[:, idx].real, ":", linewidth=2.0, label="testing LROM")
-        ax.set_ylabel(f"Re a{idx + 1}")
-        ax.grid(alpha=0.25)
-    axes[-1].set_xlabel("Vv")
-    axes[0].set_title("Vv-only reduced coefficients")
-    axes[0].legend(fontsize=8)
-    fig.tight_layout()
-    """
-    vv_wave_errors = r"""
-    phi_rose_test_vv = np.array([rbe_vv.emulate_wave_function(alpha) for alpha in test_alphas])
-    phi_lrom_test_vv = prediction.reconstruct_from_basis(
-        basis_vv.phi0,
-        basis_vv.vectors,
-        coeff_lrom_test_vv,
-    )
-
-    vv_relative_errors = {
-        "LS floor": metrics.relative_l2_rows(phi_ls_test_vv, phi_test_vv),
-        "ROSE/RBM": metrics.relative_l2_rows(phi_rose_test_vv, phi_test_vv),
-        "LROM": metrics.relative_l2_rows(phi_lrom_test_vv, phi_test_vv),
-    }
-    vv_absolute_errors = {
-        "LS floor": metrics.absolute_l2_rows(phi_ls_test_vv, phi_test_vv),
-        "ROSE/RBM": metrics.absolute_l2_rows(phi_rose_test_vv, phi_test_vv),
-        "LROM": metrics.absolute_l2_rows(phi_lrom_test_vv, phi_test_vv),
-    }
-    vv_error_summary = pd.DataFrame(
-        {
-            (metric, name): {
-                "median": np.median(error_values),
-                "p95": np.percentile(error_values, 95),
-                "max": np.max(error_values),
-            }
-            for metric, error_dict in {
-                "relative L2": vv_relative_errors,
-                "absolute L2": vv_absolute_errors,
-            }.items()
-            for name, error_values in error_dict.items()
-        }
-    ).T
-    vv_error_summary
-    """
-    vv_wave_error_plot = r"""
-    fig, axes = plt.subplots(1, 2, figsize=(10.8, 3.8), dpi=140, sharex=True)
-    for ax, error_dict, ylabel in [
-        (axes[0], vv_relative_errors, "relative L2 wavefunction error"),
-        (axes[1], vv_absolute_errors, "absolute L2 wavefunction error"),
-    ]:
-        ax.boxplot(list(error_dict.values()), labels=list(error_dict.keys()), showfliers=False)
-        ax.set_yscale("log")
-        ax.set_ylabel(ylabel)
-        ax.grid(axis="y", alpha=0.25)
-    axes[0].set_title("Vv-only relative error")
-    axes[1].set_title("Vv-only absolute error")
-    for ax in axes:
-        ax.tick_params(axis="x", rotation=15)
-    fig.tight_layout()
-    """
-    box_samples = r"""
-    V0, R0, a0 = alpha_c
-    center_3d = np.array([V0, R0, a0])
-    widths_3d = np.array([
-        cfg.vv_3d_fraction * V0,
-        cfg.rv_3d_fraction * R0,
-        cfg.av_3d_fraction * a0,
-    ])
-
-    train_samples_3d = sampling.centered_box_samples(
-        center=center_3d,
-        widths=widths_3d,
-        n_samples=cfg.n_box_train,
-        seed=cfg.seed_train,
-        include_center=True,
-    )
-    test_samples_3d = sampling.centered_box_samples(
-        center=center_3d,
-        widths=widths_3d,
-        n_samples=cfg.n_box_test,
-        seed=cfg.seed_test,
-        include_center=True,
-    )
-    problem_3d = rose_fom.make_real_ws_problem(
-        params=params,
-        train_alphas=train_samples_3d,
-        n_u=cfg.n_u,
-        l_max=cfg.l,
-        n_mesh=cfg.n_mesh,
-    )
-    phi0_3d = problem_3d.solve_phi(alpha_c)
-    phi_train_3d = problem_3d.solve_wavefunctions(train_samples_3d)
-    phi_test_3d = problem_3d.solve_wavefunctions(test_samples_3d)
-    potentials_3d = np.array(
-        [problem_3d.potential(problem_3d.r_mesh, alpha) for alpha in train_samples_3d]
-    )
-
-    print("Vv/Rv/av train wavefunctions:", phi_train_3d.shape)
-    """
-    box_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.0, 3.8), dpi=140)
-    for alpha, potential in zip(train_samples_3d, potentials_3d):
-        ax.plot(problem_3d.r_mesh, potential, alpha=0.22)
-    ax.set_xlabel("r [fm]")
-    ax.set_ylabel("V(r)")
-    ax.set_title("Vv/Rv/av potential variation")
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-
-    pd.DataFrame(
-        {
-            "split": ["train", "test"],
-            "Vv min": [train_samples_3d[:, 0].min(), test_samples_3d[:, 0].min()],
-            "Vv max": [train_samples_3d[:, 0].max(), test_samples_3d[:, 0].max()],
-            "Rv min": [train_samples_3d[:, 1].min(), test_samples_3d[:, 1].min()],
-            "Rv max": [train_samples_3d[:, 1].max(), test_samples_3d[:, 1].max()],
-            "av min": [train_samples_3d[:, 2].min(), test_samples_3d[:, 2].min()],
-            "av max": [train_samples_3d[:, 2].max(), test_samples_3d[:, 2].max()],
-        }
-    )
-    """
-    raw_lrom = r"""
-    custom_basis_3d = rose_fom.make_real_ws_custom_basis(
-        problem=problem_3d,
-        phi0=phi0_3d,
-        wavefunctions=phi_train_3d,
-        n_basis=cfg.n_basis,
-    )
-    rbe_3d = rose_fom.make_real_ws_rbe(problem=problem_3d, custom_basis=custom_basis_3d)
-    basis_3d = reduced_basis.CentralBasisData(
-        phi0=custom_basis_3d.phi_0,
-        vectors=custom_basis_3d.vectors,
-        mesh=problem_3d.rho_mesh,
-    )
-    coeff_ls_train_3d = reduced_basis.project_ls_coordinates(basis_3d, phi_train_3d)
-    coeff_ls_test_3d = reduced_basis.project_ls_coordinates(basis_3d, phi_test_3d)
-
-    raw_p_train = predictors.centered_parameter_predictors(
-        train_samples_3d,
-        center_3d,
-        widths_3d,
-    )
-    raw_p_test = predictors.centered_parameter_predictors(
-        test_samples_3d,
-        center_3d,
-        widths_3d,
-    )
-    raw_lrom = rf_lrom.fit_central_lrom(
-        name="notebook01_raw_vv_rv_av",
-        predictors=raw_p_train,
-        coeff_targets=coeff_ls_train_3d,
-    )
-    raw_coeff_test = prediction.predict_coefficients(raw_lrom, raw_p_test)
-    phi_raw_lrom_test = prediction.reconstruct_from_basis(
-        basis_3d.phi0,
-        basis_3d.vectors,
-        raw_coeff_test,
-    )
-
-    print("raw Vv/Rv/av LROM parameters:", raw_lrom.n_complex_parameters)
-    print("raw-parameter residual MSE:", raw_lrom.residual_mse)
-    """
-    potential_predictors = r"""
-    pack = predictors.make_potential_predictor_pack(
-        potential=problem_3d.potential,
-        train_alphas=train_samples_3d,
-        central_alpha=alpha_c,
-        mesh=problem_3d.r_mesh,
-        n_predictors=cfg.n_predictors,
-        min_mesh_value=cfg.min_predictor_radius,
-    )
-    pot_p_train = predictors.centered_potential_predictors(
-        potential=problem_3d.potential,
-        alphas=train_samples_3d,
-        pack=pack,
-    )
-    pot_p_test = predictors.centered_potential_predictors(
-        potential=problem_3d.potential,
-        alphas=test_samples_3d,
-        pack=pack,
-    )
-    pot_lrom = rf_lrom.fit_central_lrom(
-        name="notebook01_potential_predictors",
-        predictors=pot_p_train,
-        coeff_targets=coeff_ls_train_3d,
-    )
-    pot_coeff_test = prediction.predict_coefficients(pot_lrom, pot_p_test)
-    phi_pot_lrom_test = prediction.reconstruct_from_basis(
-        basis_3d.phi0,
-        basis_3d.vectors,
-        pot_coeff_test,
-    )
-
-    print("potential-predictor points:", pack.s_points)
-    print("potential-predictor LROM parameters:", pot_lrom.n_complex_parameters)
-    """
-    predictor_plot = r"""
-    fig, ax = plt.subplots(figsize=(7.0, 4.0), dpi=140)
-    central_potential = problem_3d.potential(problem_3d.r_mesh, alpha_c)
-    ax.plot(problem_3d.r_mesh, central_potential, color="black", linewidth=1.6, label="central potential")
-    ax.scatter(pack.s_points, pack.center_values.real, color="tab:red", zorder=5, label="maxvol predictors")
-    ax.set_xlabel("r [fm]")
-    ax.set_ylabel("V(r)")
-    ax.set_title("Operator-informed predictor locations")
-    ax.grid(alpha=0.25)
-    ax.legend()
-    fig.tight_layout()
-    """
-    performance = r"""
-    phi_ls_test_3d = prediction.reconstruct_from_basis(
-        basis_3d.phi0,
-        basis_3d.vectors,
-        coeff_ls_test_3d,
-    )
-    phi_rose_test_3d = np.array([rbe_3d.emulate_wave_function(alpha) for alpha in test_samples_3d])
-
-    relative_errors_3d = {
-        "LS floor": metrics.relative_l2_rows(phi_ls_test_3d, phi_test_3d),
-        "ROSE/RBM": metrics.relative_l2_rows(phi_rose_test_3d, phi_test_3d),
-        "raw-param LROM": metrics.relative_l2_rows(phi_raw_lrom_test, phi_test_3d),
-        "potential-predictor LROM": metrics.relative_l2_rows(phi_pot_lrom_test, phi_test_3d),
-    }
-    absolute_errors_3d = {
-        "LS floor": metrics.absolute_l2_rows(phi_ls_test_3d, phi_test_3d),
-        "ROSE/RBM": metrics.absolute_l2_rows(phi_rose_test_3d, phi_test_3d),
-        "raw-param LROM": metrics.absolute_l2_rows(phi_raw_lrom_test, phi_test_3d),
-        "potential-predictor LROM": metrics.absolute_l2_rows(phi_pot_lrom_test, phi_test_3d),
-    }
-    comparison_summary_3d = pd.DataFrame(
-        {
-            (metric, name): {
-                "median": np.median(error_values),
-                "p95": np.percentile(error_values, 95),
-                "max": np.max(error_values),
-            }
-            for metric, error_dict in {
-                "relative L2": relative_errors_3d,
-                "absolute L2": absolute_errors_3d,
-            }.items()
-            for name, error_values in error_dict.items()
-        }
-    ).T
-    comparison_summary_3d
-    """
-    performance_plot = r"""
-    fig, axes = plt.subplots(1, 2, figsize=(12.0, 4.0), dpi=140)
-    for ax, error_dict, ylabel in [
-        (axes[0], relative_errors_3d, "relative L2 wavefunction error"),
-        (axes[1], absolute_errors_3d, "absolute L2 wavefunction error"),
-    ]:
-        ax.boxplot(list(error_dict.values()), labels=list(error_dict.keys()), showfliers=False)
-        ax.set_yscale("log")
-        ax.set_ylabel(ylabel)
-        ax.tick_params(axis="x", rotation=18)
-        ax.grid(axis="y", alpha=0.25)
-    axes[0].set_title("Vv/Rv/av relative error")
-    axes[1].set_title("Vv/Rv/av absolute error")
-    fig.tight_layout()
-    """
-    takeaway = r"""
-    pd.concat(
-        {
-            "Vv-only": vv_error_summary,
-            "Vv/Rv/av": comparison_summary_3d,
-        },
-        axis=0,
-    )
-    """
     return [
         md(
             """
-            # 01. RBM vs LROM for a Single Scattering Wavefunction
+            # 01. ROSE and LROM for a Single Scattering Wavefunction
 
-            This notebook compares a traditional reduced-basis view and the RF-LROM view for the `l = 0`
-            real Woods-Saxon scattering wavefunction from the legacy `40Ca(n,n)` benchmark. The ROSE
-            interaction space is initialized with EIM and `l_max = 1`, as in the legacy teaching
-            benchmark. The first section varies only `Vv`; every section after that varies all three
-            real Woods-Saxon parameters: `Vv`, `Rv`, and `av`.
+            This notebook is the first end-to-end demonstration of the stateful
+            `lrom.LROM` API. It compares high-fidelity solutions of the nuclear
+            scattering equation with ROSE/RBM and LROM approximations for the
+            exact $l=0$ channel of $^{40}$Ca(n,n) at 14.1 MeV.
+
+            All horizontal axes use physical radius $r$ in fm. The package owns
+            numerical state; the short plotting cells remain visible here.
             """
         ),
         md(
             """
-            ## Notebook Inputs And Legacy Comparison
+            ## Notebook inputs
 
-            Why this section matters: benchmark notebooks are only scientifically useful if the
-            initialization is visible. This table makes the isotope, projectile, mesh, reduced-basis
-            sizes, training ranges, and legacy reference points explicit before any emulator is built.
+            Two independent objects make the scientific distinction explicit:
+
+            - `vv_emulator`: `ws_1`, a Vv-only linspace study with raw parameter predictors.
+            - `ws3_emulator`: `ws_3`, a Vv/Rv/av Latin-hypercube study with six selected potential predictors.
+
+            Both use a four-vector wavefunction basis and an eight-vector EIM basis.
+            Training and testing domains are deliberately separate so interpolation
+            and extrapolation behavior can be examined.
             """
         ),
         code(setup),
-        code(input_table),
         md(
             """
             ## Section 1. Parameter Varying Vv
 
-            Why this section matters: changing only `Vv` mostly rescales the real Woods-Saxon depth,
-            so it is the cleanest first check that ROSE/RBM coordinates, central least-squares
-            coordinates, and the RF-LROM equation are talking about the same reduced space.
-
-            ### 1.1 Samples And Full-Order Wavefunctions
+            The first object isolates the effect of the real Woods-Saxon depth.
+            Its testing interval is wider than its training interval.
             """
         ),
-        code(vv_samples),
-        code(vv_plot),
-        code(vv_wave_plot),
-        md(
+        code(
             """
-            ### 1.2 Reduced Basis And LS Floor
+            vv_emulator = lrom.LROM(
+                target=(40, 20),
+                projectile=(1, 0),
+                lab_energy=14.1,
+                l=0,
+                fom="nucl-scatter-eq",
+                potential="ws_1",
+            )
+            vv_center = dict(vv_emulator.central_parameters)
+            Vv0 = vv_center["Vv"]
+            vv_training_ranges = {"Vv": (0.90 * Vv0, 1.10 * Vv0)}
+            vv_testing_ranges = {"Vv": (0.65 * Vv0, 1.35 * Vv0)}
 
-            Why this subsection matters: the LS projection is the best result this basis can produce.
-            It separates basis truncation error from emulator error.
+            vv_emulator.sampling(
+                training_ranges=vv_training_ranges,
+                testing_ranges=vv_testing_ranges,
+                training_size=35,
+                testing_size=41,
+                mesh_size=800,
+                strategy="linspace",
+                seed=1204,
+                eim_basis_size=8,
+            )
+            vv_emulator.train(
+                basis_size=4,
+                predictor="parameters",
+                predictor_count=1,
+            )
+
+            print("central parameters:", dict(vv_emulator.central_parameters))
+            print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
+            print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
             """
         ),
-        code(vv_basis),
-        code(vv_basis_plot),
-        md(
+        code(
             """
-            ### 1.3 RBM/ROSE vs LROM Coordinates
-
-            Why this subsection matters: plotting both training and testing coefficients against `Vv`
-            shows what the LROM actually learns and where it is being asked to predict.
+            r = vv_emulator.mesh.radius
+            vv_values = vv_emulator.samples.design.training.values[:, 0]
+            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+            colors = plt.cm.viridis(np.linspace(0, 1, len(vv_values)))
+            for color, value, potential, phi in zip(
+                colors,
+                vv_values,
+                vv_emulator.samples.training_potentials,
+                vv_emulator.samples.training_wavefunctions[0],
+            ):
+                axes[0].plot(r, np.real(potential), color=color, alpha=0.55)
+                axes[1].plot(r, np.real(phi), color=color, alpha=0.55)
+            axes[0].set(xlabel="r [fm]", ylabel="V(r) [MeV]", title="Vv training potentials")
+            axes[1].set(xlabel="r [fm]", ylabel="Re(phi)", title="High-fidelity training solutions")
+            fig.colorbar(
+                plt.cm.ScalarMappable(
+                    norm=plt.Normalize(vv_values.min(), vv_values.max()), cmap="viridis"
+                ),
+                ax=axes,
+                label="Vv [MeV]",
+            )
+            plt.show()
             """
         ),
-        code(vv_lrom),
-        code(vv_coeff_plot),
-        md(
+        code(
             """
-            ### 1.4 Wavefunction Reproduction
+            basis = vv_emulator.basis[0]
+            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+            for index in range(basis.basis_size):
+                axes[0].plot(r, np.real(basis.vectors[:, index]), label=f"basis {index + 1}")
 
-            Why this subsection matters: coefficient agreement is not enough by itself. The benchmark
-            ultimately cares whether the reconstructed scattering wavefunction is accurate.
+            vv_test = vv_emulator.samples.design.testing.values[:, 0]
+            coefficients = vv_emulator.testing_results.coefficients
+            for method, style in (("ls", "-"), ("rose", "--"), ("lrom", ":")):
+                axes[1].plot(
+                    vv_test,
+                    np.real(coefficients[method][0][:, 0]),
+                    style,
+                    label=method.upper(),
+                )
+            axes[0].set(xlabel="r [fm]", ylabel="Re(basis vector)", title="Shared wavefunction basis")
+            axes[1].set(xlabel="Vv [MeV]", ylabel="Re(first coordinate)", title="Shared-basis coordinates")
+            axes[0].legend()
+            axes[1].legend()
+            plt.show()
             """
         ),
-        code(vv_wave_errors),
-        code(vv_wave_error_plot),
+        code(
+            """
+            vv_errors = vv_emulator.testing_errors[0]
+            fig, ax = plt.subplots(figsize=(7.2, 4.0))
+            for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
+                for error in vv_errors[method]:
+                    ax.plot(r, np.maximum(error, 1e-14), color=color, alpha=0.16)
+            ax.set_yscale("log")
+            ax.set_xlabel("r [fm]")
+            ax.set_ylabel("absolute difference")
+            ax.set_title("Vv-only testing errors: ROSE (red), LROM (orange), LS (blue)")
+            plt.show()
+            """
+        ),
         md(
-            r"""
+            """
             ## Section 2. Three-Parameter LROM Equation And Predictor Selection
 
-            Why this section matters: once `Vv`, `Rv`, and `av` all vary, the reduced coordinates are
-            no longer described well by a single depth-like scalar. The central RF-LROM equation is
-            written in transformed predictor coordinates,
+            The second object varies Vv, Rv, and av together. Its default potential
+            predictors are values of the Woods-Saxon potential at six physical radii
+            selected from the training ensemble by SVD and maxvol-style selection.
 
-            \[
-            (I + p_1 M_1 + \cdots + p_K M_K)a =
-            p_1 b_1 + \cdots + p_K b_K ,
-            \]
-
-            where the predictors may be raw parameters or operator-informed potential samples. ROSE/RBM
-            still uses EIM for the reduced interaction, while LROM uses maxvol-selected potential
-            predictors to choose informative radial locations.
-
-            ### 2.1 Vv/Rv/av Training And Testing Samples
+            The transformed equation has the form
+            $(I + p_1M_1 + \\cdots + p_KM_K)a = b_0 + \\sum_k p_kb_k$.
             """
         ),
-        code(box_samples),
-        code(box_plot),
-        md(
+        code(
             """
-            ### 2.2 Raw-Parameter Transformed Equation
+            ws3_emulator = lrom.LROM(
+                target=(40, 20),
+                projectile=(1, 0),
+                lab_energy=14.1,
+                l=0,
+                fom="nucl-scatter-eq",
+                potential="ws_3",
+            )
+            ws3_center = dict(ws3_emulator.central_parameters)
+            ws3_training_ranges = {
+                name: (0.90 * ws3_center[name], 1.10 * ws3_center[name])
+                for name in ("Vv", "Rv", "av")
+            }
+            ws3_testing_ranges = {
+                "Vv": (0.78 * ws3_center["Vv"], 1.22 * ws3_center["Vv"]),
+                "Rv": (0.80 * ws3_center["Rv"], 1.20 * ws3_center["Rv"]),
+                "av": (0.80 * ws3_center["av"], 1.20 * ws3_center["av"]),
+            }
 
-            Why this subsection matters: raw `Vv/Rv/av` predictors are the simplest transformed
-            equation. They are a useful baseline before we ask whether potential samples carry better
-            operator information.
+            ws3_emulator.sampling(
+                training_ranges=ws3_training_ranges,
+                testing_ranges=ws3_testing_ranges,
+                training_size=70,
+                testing_size=81,
+                mesh_size=900,
+                strategy="latin_hypercube",
+                seed=1204,
+                eim_basis_size=8,
+            )
+            ws3_emulator.train(
+                basis_size=4,
+                predictor="potential",
+                predictor_count=6,
+            )
+            print("potential predictor radii [fm]:", ws3_emulator.predictors.selected_radii)
             """
         ),
-        code(raw_lrom),
-        md(
+        code(
             """
-            ### 2.3 Maxvol Potential Predictors
+            r3 = ws3_emulator.mesh.radius
+            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+            for potential in ws3_emulator.samples.training_potentials:
+                axes[0].plot(r3, np.real(potential), color="slateblue", alpha=0.12)
+            axes[0].plot(r3, np.real(ws3_emulator.samples.central_potential), color="black", label="central")
+            selected_radii = ws3_emulator.predictors.selected_radii
+            selected_values = ws3_emulator.samples.central_potential[
+                ws3_emulator.predictors.selected_indices
+            ]
+            axes[0].scatter(
+                selected_radii,
+                np.real(selected_values),
+                color="crimson",
+                zorder=5,
+                label="selected potential predictor points",
+            )
+            axes[0].set(xlabel="r [fm]", ylabel="V(r) [MeV]", title="ws_3 potential predictors")
+            axes[0].legend()
 
-            Why this subsection matters: radius and diffuseness move the Woods-Saxon surface, so
-            selecting predictor locations from the potential variation gives LROM a physics-aware
-            coordinate system instead of only raw parameter coordinates.
+            for index, singular_value in enumerate(ws3_emulator.predictors.singular_values[:10], start=1):
+                axes[1].semilogy(index, singular_value, "o", color="slateblue")
+            axes[1].set(xlabel="potential mode", ylabel="singular value", title="Potential-ensemble spectrum")
+            plt.show()
             """
         ),
-        code(potential_predictors),
-        code(predictor_plot),
+        code(
+            """
+            ws3_basis = ws3_emulator.basis[0]
+            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+            for index in range(ws3_basis.basis_size):
+                axes[0].plot(r3, np.real(ws3_basis.vectors[:, index]), label=f"basis {index + 1}")
+            coefficients = ws3_emulator.testing_results.coefficients
+            case_number = np.arange(ws3_emulator.samples.design.testing.values.shape[0])
+            for method, style in (("ls", "-"), ("rose", "--"), ("lrom", ":")):
+                axes[1].plot(
+                    case_number,
+                    np.real(coefficients[method][0][:, 0]),
+                    style,
+                    alpha=0.8,
+                    label=method.upper(),
+                )
+            axes[0].set(xlabel="r [fm]", ylabel="Re(basis vector)", title="ws_3 shared basis")
+            axes[1].set(xlabel="testing case", ylabel="Re(first coordinate)", title="ws_3 shared-basis coordinates")
+            axes[0].legend()
+            axes[1].legend()
+            plt.show()
+            """
+        ),
         md(
             """
             ## Section 3. Three-Parameter Wavefunction Emulation Results
 
-            Why this section matters: this is the actual benchmark question. Given held-out
-            `Vv/Rv/av` samples, we compare the full-order wavefunction against the LS floor, ROSE/RBM,
-            raw-parameter LROM, and maxvol-predictor LROM.
-
-            ### 3.1 Wavefunction Error Summary
+            We now inspect one representative testing solution and the pointwise
+            absolute differences over all 81 testing cases. The least-squares curve
+            is the attainable floor for this fixed basis.
             """
         ),
-        code(performance),
-        code(performance_plot),
-        md(
+        code(
             """
-            ### 3.2 Notebook 1 Takeaways
+            lrom_relative = ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
+            representative_index = int(np.argsort(lrom_relative)[len(lrom_relative) // 2])
+            representative_id = ws3_emulator.samples.design.testing.case_ids[representative_index]
+            case = ws3_emulator.testing_case(case_id=representative_id)
 
-            Why this subsection matters: the final table keeps the one-parameter baseline and the
-            three-parameter benchmark visible in one place, so the package result can be compared to
-            the legacy notebook story.
+            fig, ax = plt.subplots(figsize=(7.2, 4.0))
+            ax.plot(case.radius, np.real(case.high_fidelity[0]), color="black", label="high fidelity")
+            ax.plot(case.radius, np.real(case.rose[0]), "--", color="red", label="ROSE")
+            ax.plot(case.radius, np.real(case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
+            ax.set_xlabel("r [fm]")
+            ax.set_ylabel("Re(phi)")
+            ax.set_title(f"Representative l=0 testing solution: {representative_id}")
+            ax.legend()
+            plt.show()
             """
         ),
-        code(takeaway),
+        code(
+            """
+            ws3_errors = ws3_emulator.testing_errors[0]
+            fig, ax = plt.subplots(figsize=(7.2, 4.2))
+            for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
+                for error in ws3_errors[method]:
+                    ax.plot(r3, np.maximum(error, 1e-14), color=color, alpha=0.13)
+            ax.set_yscale("log")
+            ax.set_xlabel("r [fm]")
+            ax.set_ylabel("absolute difference")
+            ax.set_title("All ws_3 testing cases: ROSE (red), LROM (orange), LS (blue)")
+            plt.show()
+            """
+        ),
+        code(
+            """
+            test_values = ws3_emulator.samples.design.testing.values
+            names = ws3_emulator.parameter_names
+            interpolation = np.ones(len(test_values), dtype=bool)
+            for column, name in enumerate(names):
+                low, high = ws3_training_ranges[name]
+                interpolation &= (test_values[:, column] >= low) & (test_values[:, column] <= high)
+
+            rows = []
+            metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]
+            for region, mask in (("interpolation", interpolation), ("extrapolation", ~interpolation)):
+                for method in ("rose", "lrom", "ls"):
+                    values = metrics[method][mask]
+                    rows.append(
+                        {
+                            "region": region,
+                            "method": method.upper(),
+                            "cases": int(mask.sum()),
+                            "median relative L2": float(np.median(values)),
+                            "maximum relative L2": float(np.max(values)),
+                        }
+                    )
+            pd.DataFrame(rows).set_index(["region", "method"])
+            """
+        ),
+        code(
+            """
+            artifact_path = ROOT / "outputs" / "notebook01_ws3_model.lrom"
+            ws3_emulator.save(path=artifact_path)
+            portable_emulator = lrom.load(path=artifact_path)
+            portable_emulator.predict(parameters=case.parameters)
+            print("portable model:", artifact_path)
+            print("prediction shape:", portable_emulator.predictions.wavefunctions[0].shape)
+            """
+        ),
     ]
 
 
 def main() -> None:
     write_notebook(NOTEBOOK_PATH, notebook_cells())
+    print(f"wrote {NOTEBOOK_PATH}")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,13 @@ from scripts import generate_notebook01
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_notebook01_bootstrap_finds_repo_root_from_notebooks_dir() -> None:
+def notebook_source() -> str:
+    return "\n\n".join(
+        cell["source"] for cell in generate_notebook01.notebook_cells()
+    )
+
+
+def test_notebook01_bootstrap_finds_new_package() -> None:
     script = f"""
 from pathlib import Path
 import os
@@ -21,116 +27,47 @@ sys.path = [p for p in sys.path if p not in {{{str(ROOT)!r}, {str(ROOT / "notebo
 
 {generate_notebook01.repo_bootstrap_source()}
 
-from lrom_bench.config import Notebook01Config
+import lrom
 
 assert ROOT == Path({str(ROOT)!r})
 assert sys.path[0] == {str(ROOT)!r}
-assert Notebook01Config().parameter_names == ("Vv", "Rv", "av")
+assert lrom.LROM.__name__ == "LROM"
 """
-
     result = subprocess.run(
         [sys.executable, "-c", script],
         check=False,
         capture_output=True,
         text=True,
     )
-
     assert result.returncode == 0, result.stderr
 
 
-def test_notebook01_setup_cell_uses_repo_bootstrap_source() -> None:
-    setup_cell = generate_notebook01.notebook_cells()[2]
+def test_setup_cell_uses_lrom_and_clears_stale_modules() -> None:
+    setup = generate_notebook01.notebook_cells()[2]["source"]
 
-    assert generate_notebook01.repo_bootstrap_source() in setup_cell["source"]
-    compile(setup_cell["source"], "notebook01 setup cell", "exec")
-
-
-def test_notebook01_setup_cell_clears_stale_lrom_bench_modules() -> None:
-    setup_cell = generate_notebook01.notebook_cells()[2]
-
-    assert "list(sys.modules)" in setup_cell["source"]
-    assert 'name == "lrom_bench"' in setup_cell["source"]
-    assert 'name.startswith("lrom_bench.")' in setup_cell["source"]
-    assert "del sys.modules[name]" in setup_cell["source"]
+    assert generate_notebook01.repo_bootstrap_source() in setup
+    assert "import lrom" in setup
+    assert 'name == "lrom"' in setup
+    assert 'name.startswith("lrom.")' in setup
+    assert "lrom_bench" not in setup
+    compile(setup, "notebook01 setup", "exec")
 
 
-def test_notebook01_source_has_requested_three_section_spine() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+def test_notebook01_keeps_the_three_scientific_sections() -> None:
+    source = notebook_source()
 
-    assert "## Section 1. Parameter Varying Vv" in source
-    assert "## Section 2. Three-Parameter LROM Equation And Predictor Selection" in source
-    assert "## Section 3. Three-Parameter Wavefunction Emulation Results" in source
-    assert "Why this section matters" in source
-    assert source.index("## Section 1. Parameter Varying Vv") < source.index(
-        "## Section 2. Three-Parameter LROM Equation And Predictor Selection"
+    headings = (
+        "## Section 1. Parameter Varying Vv",
+        "## Section 2. Three-Parameter LROM Equation And Predictor Selection",
+        "## Section 3. Three-Parameter Wavefunction Emulation Results",
     )
-    assert source.index("## Section 2. Three-Parameter LROM Equation And Predictor Selection") < source.index(
-        "## Section 3. Three-Parameter Wavefunction Emulation Results"
-    )
+    assert all(heading in source for heading in headings)
+    assert source.index(headings[0]) < source.index(headings[1]) < source.index(headings[2])
 
 
-def test_notebook01_source_includes_inputs_and_legacy_comparison() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
+def test_notebook01_contains_no_cross_section_workflow() -> None:
+    source = notebook_source().lower()
 
-    assert "Notebook Inputs And Legacy Comparison" in source
-    assert "Legacy Notebook 1" in source
-    assert "Legacy Notebook 2" in source
-    assert "40Ca(n,n)" in source
-    assert "Vv/Rv/av" in source
-    assert "n_basis" in source
-    assert "n_U" in source
-    assert "n_mesh" in source
-    assert "n_predictors" in source
-
-
-def test_notebook01_source_keeps_vv_scan_and_train_test_coefficients_visible() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
-
-    assert "(1.0 - cfg.vv_train_fraction) * alpha_c[0]" in source
-    assert "(1.0 + cfg.vv_test_fraction) * alpha_c[0]" in source
-    assert "ax.scatter(vv_train" in source
-    assert "coeff_ls_train_vv" in source
-    assert "coeff_rose_train_vv" in source
-    assert "training LS" in source
-    assert "testing LS" in source
-
-
-def test_notebook01_source_uses_vv_rv_av_after_vv_only_section() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
-
-    assert "cfg.vv_3d_fraction * V0" in source
-    assert "cfg.rv_3d_fraction * R0" in source
-    assert "cfg.av_3d_fraction * a0" in source
-    assert "train_samples_3d[:, 2]" in source
-    assert "test_samples_3d[:, 2]" in source
-    assert 'name="notebook01_raw_vv_rv_av"' in source
-    assert "Vv/Rv/av relative error" in source
-    assert "Vv/Rv/av absolute error" in source
-
-
-def test_notebook01_source_shows_transformed_lrom_equation_and_maxvol() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
-
-    assert r"(I + p_1 M_1 + \cdots + p_K M_K)a" in source
-    assert "maxvol" in source.lower()
-    assert "make_potential_predictor_pack" in source
-
-
-def test_notebook01_source_reports_absolute_and_relative_errors() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
-
-    assert "metrics.absolute_l2_rows" in source
-    assert "vv_relative_errors" in source
-    assert "vv_absolute_errors" in source
-    assert "relative_errors_3d" in source
-    assert "absolute_errors_3d" in source
-    assert "absolute L2 wavefunction error" in source
-    assert "relative L2 wavefunction error" in source
-
-
-def test_notebook01_source_removes_av_colored_training_scatter() -> None:
-    source = "\n\n".join(cell["source"] for cell in generate_notebook01.notebook_cells())
-
-    assert "Training samples colored by av" not in source
-    assert "fig.colorbar(scatter" not in source
-    assert "axes[1].scatter(" not in source
+    assert "cross_section" not in source
+    assert "cross section" not in source
+    assert "differential_cross" not in source
