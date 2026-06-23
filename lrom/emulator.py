@@ -39,6 +39,7 @@ class LROM:
         self._central_parameters: Mapping[str, float] = self._config.central_overrides
         self._kinematics: Kinematics | None = None
         self._sampling_state: SamplingState | None = None
+        self._portable_mesh: MeshState | None = None
         self._training_state: TrainingState | None = None
         self._prediction_state: Any = None
         self._fom_provider: Any = None
@@ -80,7 +81,9 @@ class LROM:
 
     @property
     def mesh(self) -> MeshState | None:
-        return None if self._sampling_state is None else self._sampling_state.mesh
+        if self._sampling_state is not None:
+            return self._sampling_state.mesh
+        return self._portable_mesh
 
     @property
     def full_order_model(self) -> Mapping[int, Any] | None:
