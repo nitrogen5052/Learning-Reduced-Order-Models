@@ -64,8 +64,12 @@ def test_vv_coefficients_compare_first_two_basis_coordinates() -> None:
     text = source()
 
     assert "for coefficient_index in range(2)" in text
-    assert '(("ls", "-"), ("rose", "--"), ("lrom", ":"))' in text
+    assert 'for method, color in (("ls", "blue"), ("lrom", "orange"), ("rose", "red"))' in text
     assert "coefficients[method][0][:, coefficient_index]" in text
+    assert ".scatter(" in text
+    assert "ax.axvspan(vv_test.min(), vv_train_low" in text
+    assert "ax.axvspan(vv_train_high, vv_test.max()" in text
+    assert "np.abs(ls_coefficients - method_coefficients)" in text
 
 
 def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
@@ -75,11 +79,24 @@ def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
     assert "vv_emulator.testing_case(case_id=vv_representative_id)" in text
     for method in ("high_fidelity", "ls", "lrom", "rose"):
         assert f"vv_case.{method}[0]" in text
+    for method in ("ls", "lrom", "rose"):
+        assert f"np.abs(vv_case.high_fidelity[0] - vv_case.{method}[0])" in text
+
+
+def test_ws3_coefficients_and_wavefunction_include_absolute_differences() -> None:
+    text = source()
+
+    assert "np.abs(ws3_ls_coefficients - method_coefficients)" in text
+    for method in ("ls", "lrom", "rose"):
+        assert f"np.abs(case.high_fidelity[0] - case.{method}[0])" in text
 
 
 def test_ws3_final_figure_is_relative_l2_violin_comparison() -> None:
     text = source()
 
-    assert 'metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]' in text
-    assert "np.log10(np.maximum(metrics[method], 1e-16))" in text
-    assert "ax.violinplot(" in text
+    assert 'training_metrics = ws3_emulator.training_results.metrics["relative_l2"][0]' in text
+    assert 'testing_metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]' in text
+    assert "training_violin = ax.violinplot(" in text
+    assert "testing_violin = ax.violinplot(" in text
+    assert 'training_violin["bodies"]' in text
+    assert 'testing_violin["bodies"]' in text
