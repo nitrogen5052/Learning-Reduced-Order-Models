@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import math
 
 import numpy as np
@@ -115,6 +115,103 @@ def _lhs_cases(
         case_ids=tuple(f"{prefix}-{index:04d}" for index in range(count)),
         parameter_names=parameter_names,
         values=values,
+    )
+
+
+def _explicit_cases(
+    *,
+    prefix: str,
+    grid: Mapping[str, Sequence[float]],
+    parameter_names: tuple[str, ...],
+    sampleable_names: tuple[str, ...],
+    central: Mapping[str, float],
+) -> ParameterCases:
+    copied = dict(grid)
+    if not copied:
+        raise LROMSamplingError("an explicit grid requires at least one parameter")
+    unknown = sorted(set(copied) - set(parameter_names))
+    if unknown:
+        raise LROMSamplingError(f"unknown parameter names: {unknown}")
+    unavailable = sorted(set(copied) - set(sampleable_names))
+    if unavailable:
+        raise LROMSamplingError(
+            f"parameters are not sampleable for this potential: {unavailable}"
+        )
+
+    columns: dict[str, np.ndarray] = {}
+    for name, column in copied.items():
+        try:
+            values = np.asarray(column, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise LROMSamplingError(
+                f"explicit grid column {name!r} must be numeric"
+            ) from exc
+        if values.ndim != 1:
+            raise LROMSamplingError(
+                f"explicit grid column {name!r} must be one-dimensional"
+            )
+        if values.size == 0:
+            raise LROMSamplingError(
+                f"explicit grid column {name!r} requires at least one value"
+            )
+        if not np.all(np.isfinite(values)):
+            raise LROMSamplingError(
+                f"explicit grid column {name!r} must be finite"
+            )
+        columns[name] = values
+
+    lengths = {len(values) for values in columns.values()}
+    if len(lengths) != 1:
+        raise LROMSamplingError(
+            "all columns in an explicit grid must have equal length"
+        )
+    count = lengths.pop()
+    values = _base_values(
+        count=count,
+        parameter_names=parameter_names,
+        central=central,
+    )
+    for name, column in columns.items():
+        values[:, parameter_names.index(name)] = column
+    return ParameterCases(
+        case_ids=tuple(f"{prefix}-{index:04d}" for index in range(count)),
+        parameter_names=parameter_names,
+        values=values,
+    )
+
+
+def create_explicit_sampling_design(
+    *,
+    parameter_names: tuple[str, ...],
+    sampleable_names: tuple[str, ...],
+    central: Mapping[str, float],
+    training_grid: Mapping[str, Sequence[float]],
+    testing_grid: Mapping[str, Sequence[float]],
+) -> SamplingDesign:
+    """Create row-aligned cases from user-supplied named parameter columns."""
+    if set(training_grid) != set(testing_grid):
+        raise LROMSamplingError(
+            "training_grid and testing_grid must use the same parameter names"
+        )
+    training = _explicit_cases(
+        prefix="train",
+        grid=training_grid,
+        parameter_names=parameter_names,
+        sampleable_names=sampleable_names,
+        central=central,
+    )
+    testing = _explicit_cases(
+        prefix="test",
+        grid=testing_grid,
+        parameter_names=parameter_names,
+        sampleable_names=sampleable_names,
+        central=central,
+    )
+    return SamplingDesign(
+        training=training,
+        testing=testing,
+        strategy="explicit_grid",
+        seed=None,
     )
 
 

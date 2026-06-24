@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from lrom import LROM
-from lrom.errors import LROMStateError
+from lrom.errors import LROMSamplingError, LROMStateError
 from lrom.state import Kinematics, MeshState, SamplingState, TrainingState
 
 
@@ -137,6 +137,36 @@ def test_sampling_updates_authoritative_state() -> None:
     assert emulator.mesh.radius.shape == (16,)
     assert emulator.samples.training_wavefunctions[2].shape == (3, 16)
     assert emulator.full_order_model == {0: "fom-0", 2: "fom-2"}
+
+
+def test_sampling_accepts_explicit_named_grids() -> None:
+    emulator = make_emulator()
+
+    emulator.sampling(
+        training_grid={"Vv": [45.0, 50.0, 55.0]},
+        testing_grid={"Vv": [42.0, 58.0]},
+        mesh_size=16,
+    )
+
+    assert emulator.samples.design.strategy == "explicit_grid"
+    assert emulator.samples.design.training.values.shape == (3, 3)
+    assert emulator.samples.design.testing.values.shape == (2, 3)
+    assert np.all(emulator.samples.design.training.values[:, 1] == 4.0)
+
+
+def test_sampling_rejects_incomplete_or_mixed_grid_modes() -> None:
+    emulator = make_emulator()
+
+    with pytest.raises(LROMSamplingError, match="both"):
+        emulator.sampling(training_grid={"Vv": [45.0]}, mesh_size=16)
+
+    with pytest.raises(LROMSamplingError, match="cannot be combined"):
+        emulator.sampling(
+            training_grid={"Vv": [45.0]},
+            testing_grid={"Vv": [55.0]},
+            training_ranges={"Vv": (45.0, 55.0)},
+            mesh_size=16,
+        )
 
 
 def test_resampling_invalidates_downstream_state() -> None:

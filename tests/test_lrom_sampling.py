@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from lrom.errors import LROMSamplingError
-from lrom.sampling import create_sampling_design
+from lrom.sampling import create_explicit_sampling_design, create_sampling_design
 
 
 CENTRAL = {"Vv": 50.0, "Rv": 4.0, "av": 0.65}
@@ -58,6 +58,55 @@ def test_lhs_is_deterministic_named_and_independent_between_splits() -> None:
     assert not np.allclose(first.training.values[:10], first.testing.values[:10])
     assert np.all((first.training.values[:, 0] >= 45) & (first.training.values[:, 0] <= 55))
     assert np.all((first.testing.values[:, 1] >= 3.2) & (first.testing.values[:, 1] <= 4.8))
+
+
+def test_explicit_grids_are_row_aligned_and_fill_central_values() -> None:
+    design = create_explicit_sampling_design(
+        parameter_names=NAMES,
+        sampleable_names=NAMES,
+        central=CENTRAL,
+        training_grid={"Vv": [45.0, 50.0, 55.0]},
+        testing_grid={"Vv": [42.0, 58.0]},
+    )
+
+    assert design.strategy == "explicit_grid"
+    assert design.training.case_ids == (
+        "train-0000",
+        "train-0001",
+        "train-0002",
+    )
+    assert np.allclose(design.training.values[:, 0], [45.0, 50.0, 55.0])
+    assert np.all(design.training.values[:, 1] == 4.0)
+    assert np.all(design.testing.values[:, 2] == 0.65)
+
+
+@pytest.mark.parametrize(
+    "training_grid, testing_grid, message",
+    [
+        (
+            {"Vv": [45.0, 50.0], "Rv": [4.0]},
+            {"Vv": [50.0], "Rv": [4.0]},
+            "equal length",
+        ),
+        ({"bad": [1.0]}, {"bad": [2.0]}, "unknown parameter"),
+        ({"Vv": [np.nan]}, {"Vv": [50.0]}, "finite"),
+        ({"Vv": []}, {"Vv": [50.0]}, "at least one"),
+        ({"Vv": [45.0]}, {"Rv": [4.0]}, "same parameter names"),
+    ],
+)
+def test_explicit_grid_validation(
+    training_grid: dict[str, list[float]],
+    testing_grid: dict[str, list[float]],
+    message: str,
+) -> None:
+    with pytest.raises(LROMSamplingError, match=message):
+        create_explicit_sampling_design(
+            parameter_names=NAMES,
+            sampleable_names=NAMES,
+            central=CENTRAL,
+            training_grid=training_grid,
+            testing_grid=testing_grid,
+        )
 
 
 @pytest.mark.parametrize(

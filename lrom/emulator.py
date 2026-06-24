@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import LROMConfig
-from .errors import LROMStateError
+from .errors import LROMSamplingError, LROMStateError
 from .potentials import PotentialFunction
-from .sampling import create_sampling_design
+from .sampling import create_explicit_sampling_design, create_sampling_design
 from .state import Kinematics, MeshState, SamplingState, TestingCase, TrainingState
 
 
@@ -170,13 +170,15 @@ class LROM:
     def sampling(
         self,
         *,
-        training_ranges: Mapping[str, tuple[float, float]],
-        testing_ranges: Mapping[str, tuple[float, float]],
-        training_size: int,
-        testing_size: int,
+        training_ranges: Mapping[str, tuple[float, float]] | None = None,
+        testing_ranges: Mapping[str, tuple[float, float]] | None = None,
+        training_size: int | None = None,
+        testing_size: int | None = None,
+        training_grid: Mapping[str, Sequence[float]] | None = None,
+        testing_grid: Mapping[str, Sequence[float]] | None = None,
         mesh_size: int = 900,
         radial_domain: tuple[float, float] | None = None,
-        strategy: str = "latin_hypercube",
+        strategy: str | None = None,
         seed: int | None = None,
         eim_basis_size: int = 8,
         solver_options: Mapping[str, object] | None = None,
@@ -185,17 +187,57 @@ class LROM:
             raise LROMStateError("a portable inference artifact cannot run sampling")
         provider = self._provider()
         central, kinematics = provider.resolve(config=self._config)
-        design = create_sampling_design(
-            parameter_names=self.parameter_names,
-            sampleable_names=self.sampleable_parameters,
-            central=central,
-            training_ranges=training_ranges,
-            testing_ranges=testing_ranges,
-            training_size=training_size,
-            testing_size=testing_size,
-            strategy=strategy,
-            seed=seed,
-        )
+        grid_mode = training_grid is not None or testing_grid is not None
+        if grid_mode:
+            if training_grid is None or testing_grid is None:
+                raise LROMSamplingError(
+                    "training_grid and testing_grid must both be provided"
+                )
+            if any(
+                value is not None
+                for value in (
+                    training_ranges,
+                    testing_ranges,
+                    training_size,
+                    testing_size,
+                    strategy,
+                    seed,
+                )
+            ):
+                raise LROMSamplingError(
+                    "explicit grids cannot be combined with ranges, sizes, strategy, or seed"
+                )
+            design = create_explicit_sampling_design(
+                parameter_names=self.parameter_names,
+                sampleable_names=self.sampleable_parameters,
+                central=central,
+                training_grid=training_grid,
+                testing_grid=testing_grid,
+            )
+        else:
+            if any(
+                value is None
+                for value in (
+                    training_ranges,
+                    testing_ranges,
+                    training_size,
+                    testing_size,
+                )
+            ):
+                raise LROMSamplingError(
+                    "range sampling requires training/testing ranges and sizes"
+                )
+            design = create_sampling_design(
+                parameter_names=self.parameter_names,
+                sampleable_names=self.sampleable_parameters,
+                central=central,
+                training_ranges=training_ranges,
+                testing_ranges=testing_ranges,
+                training_size=training_size,
+                testing_size=testing_size,
+                strategy=strategy or "latin_hypercube",
+                seed=seed,
+            )
         state = provider.sample(
             config=self._config,
             design=design,
