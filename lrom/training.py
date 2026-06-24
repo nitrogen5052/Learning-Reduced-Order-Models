@@ -90,6 +90,87 @@ def _predictor(*, emulator, kind: str, count: int) -> PredictorState:
     raise ValueError("predictor must be 'parameters' or 'potential'")
 
 
+def _evaluate(
+    *,
+    emulator,
+    bases,
+    rose_states,
+    rf_models,
+    wavefunctions,
+    parameter_values,
+    predictor_features,
+) -> TestingResults:
+    high_fidelity = dict(wavefunctions)
+    rose_wavefunctions = {}
+    lrom_wavefunctions = {}
+    ls_wavefunctions = {}
+    coefficient_sets: dict[str, dict[int, np.ndarray]] = {
+        "ls": {},
+        "rose": {},
+        "lrom": {},
+    }
+    pointwise_metrics: dict[int, dict[str, np.ndarray]] = {}
+    relative_metrics: dict[int, dict[str, np.ndarray]] = {}
+    for channel in emulator.partial_waves:
+        basis = bases[channel]
+        ls_coordinates = project_coordinates(
+            basis=basis,
+            wavefunctions=high_fidelity[channel],
+        )
+        lrom_coordinates = solve_rf_lrom(
+            model=rf_models[channel],
+            predictors=predictor_features,
+        )
+        rose_model = rose_states[channel].emulator
+        rose_coordinates = np.asarray(
+            [rose_model.coefficients(row) for row in parameter_values]
+        )
+        coefficient_sets["ls"][channel] = ls_coordinates
+        coefficient_sets["lrom"][channel] = lrom_coordinates
+        coefficient_sets["rose"][channel] = rose_coordinates
+        ls_wavefunctions[channel] = reconstruct(
+            basis=basis,
+            coordinates=ls_coordinates,
+        )
+        lrom_wavefunctions[channel] = reconstruct(
+            basis=basis,
+            coordinates=lrom_coordinates,
+        )
+        rose_wavefunctions[channel] = np.asarray(
+            [rose_model.emulate_wave_function(row) for row in parameter_values]
+        )
+        predictions = {
+            "rose": rose_wavefunctions[channel],
+            "lrom": lrom_wavefunctions[channel],
+            "ls": ls_wavefunctions[channel],
+        }
+        pointwise_metrics[channel] = {
+            method: pointwise_absolute(
+                prediction=prediction,
+                reference=high_fidelity[channel],
+            )
+            for method, prediction in predictions.items()
+        }
+        relative_metrics[channel] = {
+            method: relative_l2(
+                prediction=prediction,
+                reference=high_fidelity[channel],
+            )
+            for method, prediction in predictions.items()
+        }
+    return TestingResults(
+        high_fidelity=high_fidelity,
+        rose=rose_wavefunctions,
+        lrom=lrom_wavefunctions,
+        ls=ls_wavefunctions,
+        coefficients=coefficient_sets,
+        metrics={
+            "relative_l2": relative_metrics,
+            "pointwise_absolute": pointwise_metrics,
+        },
+    )
+
+
 class TrainingEngine:
     """Build shared ROSE/LROM bases, fits, and testing diagnostics."""
 
@@ -125,91 +206,42 @@ class TrainingEngine:
         bases = basis_only.basis
         rose_states = basis_only.rose_rbm
         rf_models = {}
-        high_fidelity = dict(samples.testing_wavefunctions)
-        rose_wavefunctions = {}
-        lrom_wavefunctions = {}
-        ls_wavefunctions = {}
-        coefficient_sets: dict[str, dict[int, np.ndarray]] = {
-            "ls": {},
-            "rose": {},
-            "lrom": {},
-        }
-        testing_errors: dict[int, dict[str, np.ndarray]] = {}
-        relative_metrics: dict[int, dict[str, np.ndarray]] = {}
         for channel in emulator.partial_waves:
             basis = bases[channel]
             train_coordinates = project_coordinates(
                 basis=basis, wavefunctions=samples.training_wavefunctions[channel]
             )
-            test_coordinates = project_coordinates(
-                basis=basis, wavefunctions=samples.testing_wavefunctions[channel]
-            )
             model = fit_rf_lrom(
                 predictors=predictor_state.training_features,
                 coordinates=train_coordinates,
             )
-            lrom_coordinates = solve_rf_lrom(
-                model=model, predictors=predictor_state.testing_features
-            )
             rf_models[channel] = model
-            coefficient_sets["ls"][channel] = test_coordinates
-            coefficient_sets["lrom"][channel] = lrom_coordinates
-            ls_wavefunctions[channel] = reconstruct(
-                basis=basis, coordinates=test_coordinates
-            )
-            lrom_wavefunctions[channel] = reconstruct(
-                basis=basis, coordinates=lrom_coordinates
-            )
-            rose_model = rose_states[channel].emulator
-            coefficient_sets["rose"][channel] = np.asarray(
-                [rose_model.coefficients(row) for row in samples.design.testing.values]
-            )
-            rose_wavefunctions[channel] = np.asarray(
-                [rose_model.emulate_wave_function(row) for row in samples.design.testing.values]
-            )
-            testing_errors[channel] = {
-                "rose": pointwise_absolute(
-                    prediction=rose_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-                "lrom": pointwise_absolute(
-                    prediction=lrom_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-                "ls": pointwise_absolute(
-                    prediction=ls_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-            }
-            relative_metrics[channel] = {
-                "rose": relative_l2(
-                    prediction=rose_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-                "lrom": relative_l2(
-                    prediction=lrom_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-                "ls": relative_l2(
-                    prediction=ls_wavefunctions[channel],
-                    reference=high_fidelity[channel],
-                ),
-            }
-        results = TestingResults(
-            high_fidelity=high_fidelity,
-            rose=rose_wavefunctions,
-            lrom=lrom_wavefunctions,
-            ls=ls_wavefunctions,
-            coefficients=coefficient_sets,
-            metrics={"relative_l2": relative_metrics},
+        training_results = _evaluate(
+            emulator=emulator,
+            bases=bases,
+            rose_states=rose_states,
+            rf_models=rf_models,
+            wavefunctions=samples.training_wavefunctions,
+            parameter_values=samples.design.training.values,
+            predictor_features=predictor_state.training_features,
+        )
+        testing_results = _evaluate(
+            emulator=emulator,
+            bases=bases,
+            rose_states=rose_states,
+            rf_models=rf_models,
+            wavefunctions=samples.testing_wavefunctions,
+            parameter_values=samples.design.testing.values,
+            predictor_features=predictor_state.testing_features,
         )
         return TrainingState(
             basis=bases,
             predictors=predictor_state,
             rf_lrom=rf_models,
             rose_rbm=rose_states,
-            testing_results=results,
-            testing_errors=testing_errors,
+            testing_results=testing_results,
+            testing_errors=testing_results.metrics["pointwise_absolute"],
+            training_results=training_results,
         )
 
 

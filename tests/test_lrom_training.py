@@ -76,6 +76,15 @@ def test_real_ws1_training_stores_shared_rose_lrom_state() -> None:
     assert emulator.testing_results.ls[0].shape == (5, 96)
     assert emulator.testing_results.metrics["relative_l2"][0]["rose"].shape == (5,)
     assert emulator.testing_results.metrics["relative_l2"][0]["lrom"].shape == (5,)
+    assert emulator.training_results.high_fidelity[0].shape == (5, 96)
+    for results in (emulator.training_results, emulator.testing_results):
+        for method in ("rose", "lrom", "ls"):
+            assert results.coefficients[method][0].shape == (5, 2)
+            assert results.metrics["relative_l2"][0][method].shape == (5,)
+            assert results.metrics["pointwise_absolute"][0][method].shape == (
+                5,
+                96,
+            )
     assert emulator.testing_errors[0]["rose"].shape == (5, 96)
     assert emulator.testing_errors[0]["lrom"].shape == (5, 96)
     assert emulator.testing_errors[0]["ls"].shape == (5, 96)
@@ -128,4 +137,6 @@ def test_real_ws3_training_uses_potential_predictors() -> None:
     assert emulator.predictors.kind == "potential"
     assert emulator.predictors.selected_radii.shape == (2,)
     assert emulator.predictors.central_values.shape == (2,)
+    assert emulator.training_results.high_fidelity[0].shape == (8, 96)
+    assert emulator.training_results.metrics["relative_l2"][0]["lrom"].shape == (8,)
     assert emulator.testing_errors[0]["lrom"].shape == (4, 96)

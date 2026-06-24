@@ -116,6 +116,10 @@ class LROM:
         return None if self._training_state is None else self._training_state.testing_results
 
     @property
+    def training_results(self) -> Any:
+        return None if self._training_state is None else self._training_state.training_results
+
+    @property
     def testing_errors(self) -> Mapping[int, Any] | None:
         return None if self._training_state is None else self._training_state.testing_errors
 

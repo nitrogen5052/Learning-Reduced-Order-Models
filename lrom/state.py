@@ -95,6 +95,7 @@ class TrainingState:
     rose_rbm: Mapping[int, Any]
     testing_results: Any
     testing_errors: Mapping[int, Any]
+    training_results: Any = None
 
 
 @dataclass(frozen=True)

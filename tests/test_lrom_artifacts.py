@@ -45,6 +45,8 @@ def test_portable_artifact_round_trips_prediction_state(tmp_path) -> None:
 
     assert loaded.samples is None
     assert loaded.full_order_model is None
+    assert loaded.training_results is None
+    assert loaded.testing_results is None
     assert loaded.is_trained
     assert loaded.can_predict
     assert loaded.mesh.radius.shape == (64,)
