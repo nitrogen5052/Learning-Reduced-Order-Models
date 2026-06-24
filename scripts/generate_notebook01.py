@@ -175,23 +175,50 @@ def notebook_cells() -> list:
         code(
             """
             basis = vv_emulator.basis[0]
-            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+            fig, ax = plt.subplots(figsize=(7.2, 3.8))
             for index in range(basis.basis_size):
-                axes[0].plot(r, np.real(basis.vectors[:, index]), label=f"basis {index + 1}")
+                ax.plot(r, np.real(basis.vectors[:, index]), label=f"basis {index + 1}")
+            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="Shared wavefunction basis")
+            ax.legend()
+            plt.show()
 
             vv_test = vv_emulator.samples.design.testing.values[:, 0]
             coefficients = vv_emulator.testing_results.coefficients
-            for method, style in (("ls", "-"), ("rose", "--"), ("lrom", ":")):
-                axes[1].plot(
-                    vv_test,
-                    np.real(coefficients[method][0][:, 0]),
-                    style,
-                    label=method.upper(),
-                )
-            axes[0].set(xlabel="r [fm]", ylabel="Re(basis vector)", title="Shared wavefunction basis")
-            axes[1].set(xlabel="Vv [MeV]", ylabel="Re(first coordinate)", title="Shared-basis coordinates")
+            fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
+            for coefficient_index in range(2):
+                ax = axes[coefficient_index]
+                for method, style in (("ls", "-"), ("rose", "--"), ("lrom", ":")):
+                    ax.plot(
+                        vv_test,
+                        np.real(coefficients[method][0][:, coefficient_index]),
+                        style,
+                        label=method.upper(),
+                    )
+                ax.set_ylabel(f"Re(a{coefficient_index + 1})")
+                ax.set_title(f"Basis coefficient {coefficient_index + 1}")
+            axes[-1].set_xlabel("Vv [MeV]")
             axes[0].legend()
-            axes[1].legend()
+            fig.suptitle("Vv-only testing coefficients: LS, ROSE, and LROM")
+            fig.tight_layout()
+            plt.show()
+            """
+        ),
+        code(
+            """
+            vv_representative_index = len(vv_test) // 2
+            vv_representative_id = vv_emulator.samples.design.testing.case_ids[vv_representative_index]
+            vv_case = vv_emulator.testing_case(case_id=vv_representative_id)
+            print("selected Vv testing case:", vv_representative_id, dict(vv_case.parameters))
+
+            fig, ax = plt.subplots(figsize=(7.2, 4.0))
+            ax.plot(vv_case.radius, np.real(vv_case.high_fidelity[0]), color="black", label="true test solution")
+            ax.plot(vv_case.radius, np.real(vv_case.ls[0]), "-.", color="blue", label="LS")
+            ax.plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
+            ax.plot(vv_case.radius, np.real(vv_case.rose[0]), "--", color="red", label="ROSE")
+            ax.set_xlabel("r [fm]")
+            ax.set_ylabel("Re(phi)")
+            ax.set_title(f"40Ca(n,n), l=0 central Vv testing solution: {vv_representative_id}")
+            ax.legend()
             plt.show()
             """
         ),
@@ -339,15 +366,25 @@ def notebook_cells() -> list:
         ),
         code(
             """
-            ws3_errors = ws3_emulator.testing_errors[0]
+            metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]
+            methods = ("ls", "lrom", "rose")
+            violin_values = [
+                np.log10(np.maximum(metrics[method], 1e-16))
+                for method in methods
+            ]
             fig, ax = plt.subplots(figsize=(7.2, 4.2))
-            for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
-                for error in ws3_errors[method]:
-                    ax.plot(r3, np.maximum(error, 1e-14), color=color, alpha=0.13)
-            ax.set_yscale("log")
-            ax.set_xlabel("r [fm]")
-            ax.set_ylabel("absolute difference")
-            ax.set_title("All ws_3 testing cases: ROSE (red), LROM (orange), LS (blue)")
+            parts = ax.violinplot(
+                violin_values,
+                showmedians=True,
+                showextrema=True,
+            )
+            for body, color in zip(parts["bodies"], ("blue", "orange", "red")):
+                body.set_facecolor(color)
+                body.set_edgecolor("black")
+                body.set_alpha(0.65)
+            ax.set_xticks(range(1, 4), [method.upper() for method in methods])
+            ax.set_ylabel("log10(relative L2 error)")
+            ax.set_title("ws_3 performance over 81 true testing solutions")
             plt.show()
             """
         ),
