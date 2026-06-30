@@ -23,7 +23,7 @@ test = ["pytest"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lrom*", "lrom_bench*"]
+include = ["lrom*", "lrom_bench*", "lrom_legacy*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

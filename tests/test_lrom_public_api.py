@@ -4,6 +4,7 @@ import inspect
 from pathlib import Path
 
 import lrom
+import lrom_legacy.N1 as lrom_N1
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,13 @@ def test_public_package_exports() -> None:
     assert lrom.__version__ == "0.1.0"
     assert lrom.LROM.__name__ == "LROM"
     assert callable(lrom.load)
+
+
+def test_notebook1_snapshot_imports_as_legacy_namespace() -> None:
+    assert lrom_N1.__version__ == "0.1.0"
+    assert lrom_N1.LROM.__name__ == "LROM"
+    assert callable(lrom_N1.load)
+    assert lrom_N1 is not lrom
 
 
 def test_constructor_is_keyword_only() -> None:
