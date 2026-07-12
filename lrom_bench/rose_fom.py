@@ -19,7 +19,9 @@ def ensure_scipy_spherical_harmonic_compat() -> None:
         return
 
     def sph_harm(m: Any, n: Any, theta: Any, phi: Any) -> Any:
-        return scipy.special.sph_harm_y(n, m, theta, phi)
+        # legacy sph_harm took (theta=azimuthal, phi=polar);
+        # sph_harm_y takes angles in (polar, azimuthal) order
+        return scipy.special.sph_harm_y(n, m, phi, theta)
 
     scipy.special.sph_harm = sph_harm
 

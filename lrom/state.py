@@ -83,6 +83,7 @@ class SamplingState:
     training_potentials: np.ndarray
     testing_potentials: np.ndarray
     full_order_models: Mapping[int, Any]
+    interaction_space: Any = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class TrainingState:
     testing_results: Any
     testing_errors: Mapping[int, Any]
     training_results: Any = None
+    training_options: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +157,25 @@ class PredictionState:
     parameters: np.ndarray
     coefficients: Mapping[int, np.ndarray]
     wavefunctions: Mapping[int, np.ndarray]
+    smatrix: Any = None
+    cross_sections: Any = None
+
+
+@dataclass(frozen=True)
+class SmatrixState:
+    """Predicted spin-up/down S-matrix arrays for a parameter batch."""
+
+    partial_waves: tuple[int, ...]
+    splus: np.ndarray
+    sminus: np.ndarray
+
+
+@dataclass(frozen=True)
+class CrossSectionState:
+    """Predicted differential cross sections for a parameter batch."""
+
+    angles_degrees: np.ndarray
+    values: np.ndarray
 
 
 @dataclass(frozen=True)

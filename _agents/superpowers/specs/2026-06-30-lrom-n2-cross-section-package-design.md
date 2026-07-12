@@ -15,7 +15,7 @@ emulator = lrom.LROM(
 )
 emulator.sampling(...)
 emulator.train(...)
-emulator.cross_sections(...)
+emulator.predict(...)
 ```
 
 The current Notebook 1 package snapshot is already frozen as
@@ -68,26 +68,31 @@ Meanings:
 - `operator_basis_size`: operator/EIM basis size `n_U`, used for the
   full Woods-Saxon interaction/operator representation needed downstream.
 
-`cross_sections(...)` produces LROM cross sections from the trained channel
-models:
+Cross sections are produced by `predict(...)` when `train(...)` configures the
+emulator for a cross-section observable:
 
 ```python
-emulator.cross_sections(
+emulator.train(
+    basis_size=4,
+    predictor="potential",
+    predictor_count=10,
+    operator_basis_size=10,
+    observable="cross_section",
     angles_degrees=np.linspace(1.0, 179.0, 120),
 )
 ```
 
-Optional FOM/reference cross sections may be requested for review:
+Then:
 
 ```python
-emulator.cross_sections(
-    angles_degrees=np.linspace(1.0, 179.0, 120),
-    reference=True,
-)
+emulator.predict(parameters={...})
 ```
 
-There is no `methods=("fom", "ls", "rose", "lrom")` selector in the Notebook 2
-API. LROM is the only predicted method. References are references, not methods.
+saves wavefunctions, S-matrix arrays, and LROM cross sections on
+`emulator.predictions`. Optional FOM/reference cross sections may be produced for
+review through an explicit reference option later, but references are references,
+not methods. There is no `methods=("fom", "ls", "rose", "lrom")` selector in the
+Notebook 2 API.
 
 ## Potential Schema
 
@@ -130,34 +135,33 @@ steps.
 - RF-LROM/operator matrices and vectors
 - `basis_size`, `predictor_count`, and `operator_basis_size` provenance
 
-### `emulator.cross_section_results`
+### `emulator.predictions`
 
 LROM is the default result, so fields do not repeat `.lrom`.
 
-- `angles_degrees`
-- `training`
-- `testing`
-- `smatrix.training.splus`
-- `smatrix.training.sminus`
-- `smatrix.testing.splus`
-- `smatrix.testing.sminus`
+- `parameter_names`
+- `parameters`
+- `coefficients`
+- `wavefunctions`
+- `smatrix.splus`
+- `smatrix.sminus`
+- `cross_sections.angles_degrees`
+- `cross_sections.values`
 
-If `reference=True` is requested:
+If reference outputs are explicitly requested later:
 
-- `reference.training`
-- `reference.testing`
+- `cross_sections.reference`
 
 The notebook access pattern should be:
 
 ```python
-xs = emulator.cross_section_results
-theta = xs.angles_degrees
+pred = emulator.predictions
+theta = pred.cross_sections.angles_degrees
 
-plt.plot(theta, xs.testing[51], label="LROM")
-plt.plot(theta, xs.reference.testing[51], "--", label="FOM reference")
+plt.plot(theta, pred.cross_sections.values[0], label="LROM")
 
-splus = xs.smatrix.testing.splus[51]
-sminus = xs.smatrix.testing.sminus[51]
+splus = pred.smatrix.splus[0]
+sminus = pred.smatrix.sminus[0]
 ```
 
 ### Error and CAT Data
@@ -180,11 +184,20 @@ The package maps the legacy method into explicit state:
 2. Solve/store channel wavefunctions for all requested partial waves.
 3. Build central-reference LROM bases.
 4. Fit potential-predictor RF-LROM channel models.
-5. Predict channel coefficients for training/testing rows.
+5. Predict channel coefficients for requested parameter rows.
 6. Convert coefficients to `S+` and `S-` channel arrays.
 7. Use ROSE scattering-amplitude assembly to compute
    `d sigma / d Omega`.
-8. Save cross-section and S-matrix arrays for notebook inspection.
+8. Save cross-section and S-matrix arrays on `emulator.predictions` for
+   notebook inspection.
+
+Current implementation checkpoint:
+
+- `predict()` produces inspectable cross-section state for the package's current
+  trained state.
+- Full `full_woods-saxon` spin-orbit cross sections preserve ROSE's plus/minus
+  channel pair for `l > 0` internally while keeping the public partial-wave API
+  as `l=(0, 1, ...)`.
 
 ## Validation Notebooks
 

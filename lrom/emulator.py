@@ -120,6 +120,10 @@ class LROM:
         return None if self._training_state is None else self._training_state.training_results
 
     @property
+    def training_options(self) -> Mapping[str, Any] | None:
+        return None if self._training_state is None else self._training_state.training_options
+
+    @property
     def testing_errors(self) -> Mapping[int, Any] | None:
         return None if self._training_state is None else self._training_state.testing_errors
 
@@ -270,6 +274,9 @@ class LROM:
         basis_size: int = 4,
         predictor: str = "potential",
         predictor_count: int = 6,
+        operator_basis_size: int | None = None,
+        observable: str = "wavefunction",
+        angles_degrees: Sequence[float] | None = None,
     ) -> None:
         if self._inference_only:
             raise LROMStateError("a portable inference artifact cannot be retrained")
@@ -280,6 +287,9 @@ class LROM:
             basis_size=basis_size,
             predictor=predictor,
             predictor_count=predictor_count,
+            operator_basis_size=operator_basis_size,
+            observable=observable,
+            angles_degrees=angles_degrees,
         )
         self._clear_prediction_state()
 

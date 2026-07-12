@@ -19,14 +19,30 @@ from .rf import fit as fit_rf_lrom
 from .rf import solve as solve_rf_lrom
 from .state import (
     BasisState,
+    CrossSectionState,
     PredictionState,
     RoseRBMState,
+    SmatrixState,
     TestingResults,
     TrainingState,
 )
 
 
-def _shared_rose_basis(*, emulator, channel: int, basis_size: int) -> RoseRBMState:
+def _channel_sort_key(channel) -> tuple[int, int]:
+    if isinstance(channel, tuple):
+        return int(channel[0]), int(channel[1])
+    return int(channel), 0
+
+
+def _trained_channels(emulator) -> tuple:
+    return tuple(sorted(emulator.samples.full_order_models, key=_channel_sort_key))
+
+
+def _interaction_channel_key(interaction_row: Sequence, ell: int, spin_index: int):
+    return ell if len(interaction_row) == 1 else (ell, spin_index)
+
+
+def _shared_rose_basis(*, emulator, channel, basis_size: int) -> RoseRBMState:
     rose = _import_rose()
     samples = emulator.samples
     model = samples.full_order_models[channel]
@@ -104,14 +120,14 @@ def _evaluate(
     rose_wavefunctions = {}
     lrom_wavefunctions = {}
     ls_wavefunctions = {}
-    coefficient_sets: dict[str, dict[int, np.ndarray]] = {
+    coefficient_sets: dict[str, dict[object, np.ndarray]] = {
         "ls": {},
         "rose": {},
         "lrom": {},
     }
-    pointwise_metrics: dict[int, dict[str, np.ndarray]] = {}
-    relative_metrics: dict[int, dict[str, np.ndarray]] = {}
-    for channel in emulator.partial_waves:
+    pointwise_metrics: dict[object, dict[str, np.ndarray]] = {}
+    relative_metrics: dict[object, dict[str, np.ndarray]] = {}
+    for channel in _trained_channels(emulator):
         basis = bases[channel]
         ls_coordinates = project_coordinates(
             basis=basis,
@@ -179,7 +195,7 @@ class TrainingEngine:
             channel: _shared_rose_basis(
                 emulator=emulator, channel=channel, basis_size=basis_size
             )
-            for channel in emulator.partial_waves
+            for channel in _trained_channels(emulator)
         }
         return TrainingState(
             basis={channel: state.basis for channel, state in rose_states.items()},
@@ -187,7 +203,8 @@ class TrainingEngine:
             rf_lrom={},
             rose_rbm=rose_states,
             testing_results=None,
-            testing_errors={channel: {} for channel in emulator.partial_waves},
+            testing_errors={channel: {} for channel in _trained_channels(emulator)},
+            training_options={"basis_size": basis_size},
         )
 
     def train(
@@ -197,7 +214,32 @@ class TrainingEngine:
         basis_size: int,
         predictor: str,
         predictor_count: int,
+        operator_basis_size: int | None,
+        observable: str,
+        angles_degrees: Sequence[float] | None,
     ) -> TrainingState:
+        if (
+            operator_basis_size is not None
+            and (
+                isinstance(operator_basis_size, bool)
+                or not isinstance(operator_basis_size, int)
+                or operator_basis_size < 1
+            )
+        ):
+            raise ValueError("operator_basis_size must be a positive integer")
+        if observable not in {"wavefunction", "cross_section"}:
+            raise ValueError("observable must be 'wavefunction' or 'cross_section'")
+        angle_array = None
+        if angles_degrees is not None:
+            angle_array = np.asarray(angles_degrees, dtype=float)
+            if angle_array.ndim != 1 or angle_array.size == 0:
+                raise ValueError(
+                    "angles_degrees must be a non-empty one-dimensional array"
+                )
+            if not np.all(np.isfinite(angle_array)):
+                raise ValueError("angles_degrees must contain finite values")
+        if observable == "cross_section" and angle_array is None:
+            raise ValueError("cross_section observable requires angles_degrees")
         basis_only = self.reduced_basis(emulator=emulator, basis_size=basis_size)
         predictor_state = _predictor(
             emulator=emulator, kind=predictor, count=predictor_count
@@ -206,7 +248,7 @@ class TrainingEngine:
         bases = basis_only.basis
         rose_states = basis_only.rose_rbm
         rf_models = {}
-        for channel in emulator.partial_waves:
+        for channel in _trained_channels(emulator):
             basis = bases[channel]
             train_coordinates = project_coordinates(
                 basis=basis, wavefunctions=samples.training_wavefunctions[channel]
@@ -242,6 +284,14 @@ class TrainingEngine:
             testing_results=testing_results,
             testing_errors=testing_results.metrics["pointwise_absolute"],
             training_results=training_results,
+            training_options={
+                "basis_size": basis_size,
+                "predictor": predictor,
+                "predictor_count": predictor_count,
+                "operator_basis_size": operator_basis_size,
+                "observable": observable,
+                "angles_degrees": angle_array,
+            },
         )
 
 
@@ -263,6 +313,92 @@ def _parameter_rows(*, emulator, parameters) -> np.ndarray:
     return values
 
 
+def _s_matrix_from_coefficients(rbe, coeff: np.ndarray):
+    x = np.hstack((1, np.asarray(coeff, dtype=np.complex128)))
+    phi = np.dot(x, rbe.asymptotic_vals)
+    phi_prime = np.dot(x, rbe.asymptotic_ders)
+    r_matrix = 1 / rbe.s_0 * phi / phi_prime
+    return (rbe.Hm - rbe.s_0 * r_matrix * rbe.Hmp) / (
+        rbe.Hp - rbe.s_0 * r_matrix * rbe.Hpp
+    )
+
+
+def _cross_section_prediction(
+    *,
+    emulator,
+    values: np.ndarray,
+    coefficients: Mapping[int, np.ndarray],
+) -> tuple[SmatrixState, CrossSectionState]:
+    samples = emulator.samples
+    options = emulator.training_options or {}
+    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
+    angles = np.deg2rad(angles_degrees)
+    partial_waves = tuple(emulator.partial_waves)
+    if samples.interaction_space is None:
+        raise RuntimeError("cross-section prediction requires sampled interaction state")
+    if partial_waves != tuple(range(max(partial_waves) + 1)):
+        raise ValueError(
+            "cross-section prediction requires contiguous partial waves starting at l=0"
+        )
+    rose = _import_rose()
+    bases = []
+    for ell in partial_waves:
+        interaction_row = samples.interaction_space.interactions[ell]
+        bases.append(
+            [
+                emulator.rose_rbm[
+                    _interaction_channel_key(interaction_row, ell, spin_index)
+                ].custom_basis
+                for spin_index in range(len(interaction_row))
+            ]
+        )
+    sae = rose.ScatteringAmplitudeEmulator(
+        samples.interaction_space,
+        bases,
+        l_max=max(partial_waves),
+        angles=angles,
+        s_0=samples.full_order_models[partial_waves[0]].base_solver.s_0,
+        Smatrix_abs_tol=1e-8,
+        initialize_emulator=True,
+    )
+    splus_rows = []
+    sminus_rows = []
+    cross_sections = []
+    for case_index, row in enumerate(values):
+        splus = np.zeros(len(partial_waves), dtype=np.complex128)
+        sminus = np.zeros(len(partial_waves), dtype=np.complex128)
+        for offset, channel in enumerate(partial_waves):
+            interaction_row = samples.interaction_space.interactions[channel]
+            plus_key = _interaction_channel_key(interaction_row, channel, 0)
+            coeff = coefficients[plus_key][case_index]
+            splus[offset] = _s_matrix_from_coefficients(
+                sae.rbes[channel][0],
+                coeff,
+            )
+            if len(interaction_row) == 1:
+                sminus[offset] = splus[offset]
+            else:
+                minus_key = _interaction_channel_key(interaction_row, channel, 1)
+                sminus[offset] = _s_matrix_from_coefficients(
+                    sae.rbes[channel][1],
+                    coefficients[minus_key][case_index],
+                )
+        splus_rows.append(splus)
+        sminus_rows.append(sminus)
+        cross_sections.append(sae.calculate_xs(splus, sminus, row, angles=angles).dsdo)
+    return (
+        SmatrixState(
+            partial_waves=partial_waves,
+            splus=np.asarray(splus_rows),
+            sminus=np.asarray(sminus_rows),
+        ),
+        CrossSectionState(
+            angles_degrees=angles_degrees,
+            values=np.asarray(cross_sections, dtype=float),
+        ),
+    )
+
+
 def predict(*, emulator, parameters) -> PredictionState:
     """Predict one or more named parameter cases from trained portable state."""
     values = _parameter_rows(emulator=emulator, parameters=parameters)
@@ -282,9 +418,20 @@ def predict(*, emulator, parameters) -> PredictionState:
         )
         for channel, coordinates in coefficients.items()
     }
+    smatrix = None
+    cross_sections = None
+    options = emulator.training_options or {}
+    if options.get("observable") == "cross_section":
+        smatrix, cross_sections = _cross_section_prediction(
+            emulator=emulator,
+            values=values,
+            coefficients=coefficients,
+        )
     return PredictionState(
         parameter_names=emulator.parameter_names,
         parameters=values,
         coefficients=coefficients,
         wavefunctions=wavefunctions,
+        smatrix=smatrix,
+        cross_sections=cross_sections,
     )

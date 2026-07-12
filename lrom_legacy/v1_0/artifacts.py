@@ -215,7 +215,6 @@ def load(*, path: str | Path) -> LROM:
             basis=bases,
             predictors=predictor,
             rf_lrom=models,
-            rose_rbm={},
             testing_results=None,
             testing_errors={channel: {} for channel in bases},
         )

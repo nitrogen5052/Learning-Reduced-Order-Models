@@ -12,7 +12,7 @@ import numpy as np
 
 from .config import LROMConfig
 from .errors import LROMConfigurationError, LROMSamplingError
-from .potentials import real_woods_saxon
+from .potentials import full_woods_saxon, full_woods_saxon_central, real_woods_saxon
 from .state import Kinematics, MeshState, SamplingDesign, SamplingState
 
 
@@ -21,7 +21,9 @@ def _import_rose() -> Any:
 
     if not hasattr(scipy.special, "sph_harm") and hasattr(scipy.special, "sph_harm_y"):
         def sph_harm(m: Any, n: Any, theta: Any, phi: Any) -> Any:
-            return scipy.special.sph_harm_y(n, m, theta, phi)
+            # legacy sph_harm took (theta=azimuthal, phi=polar);
+            # sph_harm_y takes angles in (polar, azimuthal) order
+            return scipy.special.sph_harm_y(n, m, phi, theta)
 
         scipy.special.sph_harm = sph_harm
     try:
@@ -41,11 +43,44 @@ def _real_ws_interaction(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return -vv / (1.0 + np.exp((r - rv) / av))
 
 
+@njit
+def _woods_saxon(r: np.ndarray, R: float, a: float) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp((r - R) / a))
+
+
+@njit
+def _woods_saxon_prime(r: np.ndarray, R: float, a: float) -> np.ndarray:
+    ex = np.exp((r - R) / a)
+    return -(ex / a) / (1.0 + ex) ** 2
+
+
+@njit
+def _full_ws_interaction(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    vv, wv, wd, _vso, rv, rd, _rso, av, ad, _aso = alpha
+    # ROSE KD_simple sign convention: both imaginary terms are absorptive
+    # for positive Wv and Wd.
+    return (
+        -vv * _woods_saxon(r, rv, av)
+        - 1j * wv * _woods_saxon(r, rv, av)
+        + 4j * ad * wd * _woods_saxon_prime(r, rd, ad)
+    )
+
+
+@njit
+def _full_ws_spin_orbit(
+    r: np.ndarray, alpha: np.ndarray, ldots: float
+) -> np.ndarray:
+    _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = alpha
+    mass_pion = 139.57039
+    # matches ROSE thomas_safe: (1/r) d/dr f, physical 1/r retained
+    return vso / mass_pion**2 * ldots * _woods_saxon_prime(r, rso, aso) / r
+
+
 @dataclass(frozen=True)
 class ChannelFOM:
     """Live ROSE solver state for one exact partial-wave channel."""
 
-    channel: int
+    channel: Any
     interaction: Any
     solver: Any
     base_solver: Any
@@ -87,6 +122,12 @@ class NuclearScatteringFOM:
         )
         if config.potential.name in {"ws_1", "ws_3"}:
             values = np.asarray(kd_values[:3], dtype=float)
+        elif config.potential.name == "full_woods-saxon":
+            central_full = full_woods_saxon_central(target_a=config.target[0])
+            values = np.asarray(
+                [central_full[name] for name in config.parameter_names],
+                dtype=float,
+            )
         elif config.potential.name == "woods-saxon":
             values = np.asarray(kd_values, dtype=float)
         else:
@@ -162,6 +203,13 @@ class NuclearScatteringFOM:
                 is_complex=True,
             )
             potential_function = rose.koning_delaroche.KD_simple
+        elif config.potential.name == "full_woods-saxon":
+            kwargs.update(
+                coordinate_space_potential=_full_ws_interaction,
+                spin_orbit_term=_full_ws_spin_orbit,
+                is_complex=True,
+            )
+            potential_function = full_woods_saxon
         else:
             kwargs.update(
                 coordinate_space_potential=(
@@ -186,18 +234,24 @@ class NuclearScatteringFOM:
             rk_tols=list(rk_tols),
             domain=np.asarray(rho_domain, dtype=float),
         )
-        full_order_models: dict[int, ChannelFOM] = {}
+        full_order_models: dict[Any, ChannelFOM] = {}
         for channel in config.channels:
-            interaction = interactions.interactions[channel][0]
-            solver = base_solver.clone_for_new_interaction(interaction)
-            full_order_models[channel] = ChannelFOM(
-                channel=channel,
-                interaction=interaction,
-                solver=solver,
-                base_solver=base_solver,
-                rho_mesh=rho_mesh,
-                radius_mesh=radius_mesh,
-            )
+            interaction_row = interactions.interactions[channel]
+            for spin_index, interaction in enumerate(interaction_row):
+                key: Any = (
+                    channel
+                    if len(interaction_row) == 1
+                    else (channel, spin_index)
+                )
+                solver = base_solver.clone_for_new_interaction(interaction)
+                full_order_models[key] = ChannelFOM(
+                    channel=key,
+                    interaction=interaction,
+                    solver=solver,
+                    base_solver=base_solver,
+                    rho_mesh=rho_mesh,
+                    radius_mesh=radius_mesh,
+                )
 
         central_wavefunctions = {
             channel: model.solve(parameters=central_vector)
@@ -238,4 +292,5 @@ class NuclearScatteringFOM:
             training_potentials=training_potentials,
             testing_potentials=testing_potentials,
             full_order_models=full_order_models,
+            interaction_space=interactions,
         )

@@ -6,7 +6,7 @@ import textwrap
 import nbformat as nbf
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOK_PATH = ROOT / "notebooks" / "01_rbm_vs_lrom_single_wavefunction.ipynb"
 
 
@@ -94,7 +94,7 @@ def notebook_cells() -> list:
 
             Two independent objects make the scientific distinction explicit:
 
-            - `vv_emulator`: `ws_1`, a Vv-only linspace study with raw parameter predictors.
+            - `vv_emulator`: `ws_1`, a Vv-only linspace study with normalized parameter predictors.
             - `ws3_emulator`: `ws_3`, a Vv/Rv/av Latin-hypercube study with six selected potential predictors.
 
             Both use a four-vector wavefunction basis and an eight-vector EIM basis.
@@ -275,7 +275,10 @@ def notebook_cells() -> list:
             selected from the training ensemble by SVD and maxvol-style selection.
 
             The transformed equation has the form
-            $(I + p_1M_1 + \\cdots + p_KM_K)a = b_0 + \\sum_k p_kb_k$.
+            $(I + p_1M_1 + \\cdots + p_KM_K)a = \\sum_k p_kb_k$.
+            The constant source $b_0$ is identically zero here because the
+            predictors and the reduced coordinates are both centered on the
+            reference solution: $p = 0$ must give $a = 0$.
             """
         ),
         code(

@@ -108,10 +108,6 @@ class LROM:
         return None if self._training_state is None else self._training_state.rf_lrom
 
     @property
-    def rose_rbm(self) -> Mapping[int, Any] | None:
-        return None if self._training_state is None else self._training_state.rose_rbm
-
-    @property
     def testing_results(self) -> Any:
         return None if self._training_state is None else self._training_state.testing_results
 
@@ -310,7 +306,6 @@ class LROM:
                 channel: values[index]
                 for channel, values in results.high_fidelity.items()
             },
-            rose={channel: values[index] for channel, values in results.rose.items()},
             lrom={channel: values[index] for channel, values in results.lrom.items()},
             ls={channel: values[index] for channel, values in results.ls.items()},
         )

@@ -92,7 +92,6 @@ class TrainingState:
     basis: Mapping[int, Any]
     predictors: Any
     rf_lrom: Mapping[int, Any]
-    rose_rbm: Mapping[int, Any]
     testing_results: Any
     testing_errors: Mapping[int, Any]
     training_results: Any = None
@@ -127,20 +126,10 @@ class BasisState:
 
 
 @dataclass(frozen=True)
-class RoseRBMState:
-    """Live ROSE emulator sharing one authoritative reduced basis."""
-
-    basis: BasisState
-    custom_basis: Any
-    emulator: Any
-
-
-@dataclass(frozen=True)
 class TestingResults:
     """Testing-set wavefunctions produced by every approved method."""
 
     high_fidelity: Mapping[int, np.ndarray]
-    rose: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
     ls: Mapping[int, np.ndarray]
     coefficients: Mapping[str, Mapping[int, np.ndarray]]
@@ -165,6 +154,5 @@ class TestingCase:
     parameters: Mapping[str, float]
     radius: np.ndarray
     high_fidelity: Mapping[int, np.ndarray]
-    rose: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
     ls: Mapping[int, np.ndarray]

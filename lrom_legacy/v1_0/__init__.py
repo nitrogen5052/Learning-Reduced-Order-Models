@@ -13,7 +13,7 @@ from .errors import (
     LROMStateError,
 )
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 
 def load(*, path: str | Path) -> LROM:

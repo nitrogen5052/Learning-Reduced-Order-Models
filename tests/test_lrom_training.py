@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from lrom import LROM
+from lrom.potentials import full_woods_saxon_central
 from lrom.predictors import build_parameter_predictor, build_potential_predictor
 
 
@@ -140,3 +141,117 @@ def test_real_ws3_training_uses_potential_predictors() -> None:
     assert emulator.training_results.high_fidelity[0].shape == (8, 96)
     assert emulator.training_results.metrics["relative_l2"][0]["lrom"].shape == (8,)
     assert emulator.testing_errors[0]["lrom"].shape == (4, 96)
+
+
+def test_train_records_cross_section_observable_intent() -> None:
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=0,
+        potential="ws_1",
+    )
+    emulator.sampling(
+        training_ranges={"Vv": (47.0, 53.0)},
+        testing_ranges={"Vv": (45.0, 55.0)},
+        training_size=5,
+        testing_size=5,
+        mesh_size=96,
+        strategy="linspace",
+        seed=9,
+        eim_basis_size=2,
+    )
+
+    emulator.train(
+        basis_size=2,
+        predictor="parameters",
+        operator_basis_size=7,
+        observable="cross_section",
+        angles_degrees=np.linspace(1.0, 179.0, 12),
+    )
+
+    assert emulator.training_options["basis_size"] == 2
+    assert emulator.training_options["predictor"] == "parameters"
+    assert emulator.training_options["predictor_count"] == 6
+    assert emulator.training_options["operator_basis_size"] == 7
+    assert emulator.training_options["observable"] == "cross_section"
+    assert emulator.training_options["angles_degrees"].shape == (12,)
+
+
+def test_predict_produces_cross_sections_when_trained_for_observable() -> None:
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=0,
+        potential="ws_1",
+    )
+    emulator.sampling(
+        training_ranges={"Vv": (47.0, 53.0)},
+        testing_ranges={"Vv": (45.0, 55.0)},
+        training_size=5,
+        testing_size=3,
+        mesh_size=96,
+        strategy="linspace",
+        seed=9,
+        eim_basis_size=2,
+    )
+    angles = np.linspace(5.0, 175.0, 9)
+    emulator.train(
+        basis_size=2,
+        predictor="parameters",
+        observable="cross_section",
+        angles_degrees=angles,
+    )
+
+    emulator.predict(parameters=[{"Vv": 49.0}, {"Vv": 51.0}])
+
+    assert emulator.predictions.smatrix.partial_waves == (0,)
+    assert emulator.predictions.smatrix.splus.shape == (2, 1)
+    assert emulator.predictions.smatrix.sminus.shape == (2, 1)
+    assert emulator.predictions.cross_sections.angles_degrees.tolist() == angles.tolist()
+    assert emulator.predictions.cross_sections.values.shape == (2, 9)
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+    assert np.all(emulator.predictions.cross_sections.values > 0.0)
+
+
+def test_full_woods_saxon_predict_uses_spin_orbit_smatrix_channels() -> None:
+    ranges = {
+        name: tuple(sorted((0.98 * value, 1.02 * value)))
+        for name, value in full_woods_saxon_central(target_a=40).items()
+    }
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=(0, 1),
+        potential="full_woods-saxon",
+    )
+    emulator.sampling(
+        training_ranges=ranges,
+        testing_ranges=ranges,
+        training_size=5,
+        testing_size=3,
+        mesh_size=80,
+        strategy="latin_hypercube",
+        seed=13,
+        eim_basis_size=2,
+    )
+    angles = np.linspace(10.0, 170.0, 7)
+    emulator.train(
+        basis_size=2,
+        predictor="parameters",
+        observable="cross_section",
+        angles_degrees=angles,
+    )
+
+    emulator.predict(parameters={})
+
+    assert emulator.predictions.smatrix.partial_waves == (0, 1)
+    assert emulator.predictions.smatrix.splus.shape == (1, 2)
+    assert emulator.predictions.smatrix.sminus.shape == (1, 2)
+    assert emulator.predictions.smatrix.splus[0, 0] == emulator.predictions.smatrix.sminus[0, 0]
+    assert emulator.predictions.smatrix.splus[0, 1] != emulator.predictions.smatrix.sminus[0, 1]
+    assert emulator.predictions.cross_sections.values.shape == (1, 7)
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+    assert np.all(emulator.predictions.cross_sections.values > 0.0)

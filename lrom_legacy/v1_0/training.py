@@ -6,9 +6,8 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from .basis import project_coordinates, reconstruct
+from .basis import build_basis, project_coordinates, reconstruct
 from .diagnostics import pointwise_absolute, relative_l2
-from .fom import _import_rose
 from .predictors import (
     PredictorState,
     build_parameter_predictor,
@@ -18,46 +17,19 @@ from .predictors import (
 from .rf import fit as fit_rf_lrom
 from .rf import solve as solve_rf_lrom
 from .state import (
-    BasisState,
     PredictionState,
-    RoseRBMState,
     TestingResults,
     TrainingState,
 )
 
 
-def _shared_rose_basis(*, emulator, channel: int, basis_size: int) -> RoseRBMState:
-    rose = _import_rose()
+def _centered_basis(*, emulator, channel: int, basis_size: int):
     samples = emulator.samples
-    model = samples.full_order_models[channel]
-    custom_basis = rose.basis.CustomBasis(
-        solutions=np.asarray(samples.training_wavefunctions[channel], dtype=np.complex128).T.copy(),
-        phi_0=np.asarray(samples.central_wavefunctions[channel], dtype=np.complex128).copy(),
-        rho_mesh=samples.mesh.rho,
-        n_basis=basis_size,
-        solver=model.solver,
-        subtract_phi0=True,
-        use_svd=True,
-        center=False,
-        scale=False,
-    )
-    singular_values = np.asarray(custom_basis.singular_values, dtype=float)[:basis_size]
-    basis = BasisState(
-        phi0=custom_basis.phi_0,
-        vectors=custom_basis.vectors,
+    return build_basis(
+        phi0=np.asarray(samples.central_wavefunctions[channel], dtype=np.complex128),
+        snapshots=np.asarray(samples.training_wavefunctions[channel], dtype=np.complex128),
         radius=samples.mesh.radius,
-        singular_values=singular_values,
-    )
-    rose_emulator = rose.reduced_basis_emulator.ReducedBasisEmulator(
-        model.interaction,
-        custom_basis,
-        s_0=model.base_solver.s_0,
-        initialize_emulator=True,
-    )
-    return RoseRBMState(
-        basis=basis,
-        custom_basis=custom_basis,
-        emulator=rose_emulator,
+        basis_size=basis_size,
     )
 
 
@@ -94,19 +66,15 @@ def _evaluate(
     *,
     emulator,
     bases,
-    rose_states,
     rf_models,
     wavefunctions,
-    parameter_values,
     predictor_features,
 ) -> TestingResults:
     high_fidelity = dict(wavefunctions)
-    rose_wavefunctions = {}
     lrom_wavefunctions = {}
     ls_wavefunctions = {}
     coefficient_sets: dict[str, dict[int, np.ndarray]] = {
         "ls": {},
-        "rose": {},
         "lrom": {},
     }
     pointwise_metrics: dict[int, dict[str, np.ndarray]] = {}
@@ -121,13 +89,8 @@ def _evaluate(
             model=rf_models[channel],
             predictors=predictor_features,
         )
-        rose_model = rose_states[channel].emulator
-        rose_coordinates = np.asarray(
-            [rose_model.coefficients(row) for row in parameter_values]
-        )
         coefficient_sets["ls"][channel] = ls_coordinates
         coefficient_sets["lrom"][channel] = lrom_coordinates
-        coefficient_sets["rose"][channel] = rose_coordinates
         ls_wavefunctions[channel] = reconstruct(
             basis=basis,
             coordinates=ls_coordinates,
@@ -136,11 +99,7 @@ def _evaluate(
             basis=basis,
             coordinates=lrom_coordinates,
         )
-        rose_wavefunctions[channel] = np.asarray(
-            [rose_model.emulate_wave_function(row) for row in parameter_values]
-        )
         predictions = {
-            "rose": rose_wavefunctions[channel],
             "lrom": lrom_wavefunctions[channel],
             "ls": ls_wavefunctions[channel],
         }
@@ -160,7 +119,6 @@ def _evaluate(
         }
     return TestingResults(
         high_fidelity=high_fidelity,
-        rose=rose_wavefunctions,
         lrom=lrom_wavefunctions,
         ls=ls_wavefunctions,
         coefficients=coefficient_sets,
@@ -172,20 +130,19 @@ def _evaluate(
 
 
 class TrainingEngine:
-    """Build shared ROSE/LROM bases, fits, and testing diagnostics."""
+    """Build centered LROM bases, fits, and testing diagnostics."""
 
     def reduced_basis(self, *, emulator, basis_size: int) -> TrainingState:
-        rose_states = {
-            channel: _shared_rose_basis(
+        bases = {
+            channel: _centered_basis(
                 emulator=emulator, channel=channel, basis_size=basis_size
             )
             for channel in emulator.partial_waves
         }
         return TrainingState(
-            basis={channel: state.basis for channel, state in rose_states.items()},
+            basis=bases,
             predictors=None,
             rf_lrom={},
-            rose_rbm=rose_states,
             testing_results=None,
             testing_errors={channel: {} for channel in emulator.partial_waves},
         )
@@ -204,7 +161,6 @@ class TrainingEngine:
         )
         samples = emulator.samples
         bases = basis_only.basis
-        rose_states = basis_only.rose_rbm
         rf_models = {}
         for channel in emulator.partial_waves:
             basis = bases[channel]
@@ -219,26 +175,21 @@ class TrainingEngine:
         training_results = _evaluate(
             emulator=emulator,
             bases=bases,
-            rose_states=rose_states,
             rf_models=rf_models,
             wavefunctions=samples.training_wavefunctions,
-            parameter_values=samples.design.training.values,
             predictor_features=predictor_state.training_features,
         )
         testing_results = _evaluate(
             emulator=emulator,
             bases=bases,
-            rose_states=rose_states,
             rf_models=rf_models,
             wavefunctions=samples.testing_wavefunctions,
-            parameter_values=samples.design.testing.values,
             predictor_features=predictor_state.testing_features,
         )
         return TrainingState(
             basis=bases,
             predictors=predictor_state,
             rf_lrom=rf_models,
-            rose_rbm=rose_states,
             testing_results=testing_results,
             testing_errors=testing_results.metrics["pointwise_absolute"],
             training_results=training_results,

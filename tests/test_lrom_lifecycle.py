@@ -63,7 +63,17 @@ class FakeFOMProvider:
 
 
 class FakeTrainingEngine:
-    def train(self, *, emulator, basis_size, predictor, predictor_count) -> TrainingState:
+    def train(
+        self,
+        *,
+        emulator,
+        basis_size,
+        predictor,
+        predictor_count,
+        operator_basis_size=None,
+        observable="wavefunction",
+        angles_degrees=None,
+    ) -> TrainingState:
         return TrainingState(
             basis={channel: f"basis-{channel}" for channel in emulator.partial_waves},
             predictors={"kind": predictor, "count": predictor_count},

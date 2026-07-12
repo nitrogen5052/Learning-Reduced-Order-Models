@@ -73,3 +73,17 @@ def test_write_parity_report_rejects_empty_comparisons(tmp_path: Path) -> None:
         assert "comparison" in str(exc)
     else:
         raise AssertionError("write_parity_report accepted empty comparisons")
+
+
+def test_report_metadata_can_include_scientific_notes(tmp_path: Path) -> None:
+    report = tmp_path / "report.json"
+    comparison = ArrayComparison(name="x", passed=True, max_abs_error=0.0)
+    metadata = {
+        "config_hash": "abc123",
+        "scientific_notes": ["frozen artifact parity"],
+    }
+
+    write_parity_report(report, comparisons=[comparison], metadata=metadata)
+
+    payload = json.loads(report.read_text())
+    assert payload["metadata"]["scientific_notes"] == ["frozen artifact parity"]

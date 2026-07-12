@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts import generate_notebook01
+from _agents.scripts import generate_notebook01
 
 
 def source() -> str:

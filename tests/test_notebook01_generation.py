@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts import generate_notebook01
+from _agents.scripts import generate_notebook01
 
 
 ROOT = Path(__file__).resolve().parents[1]

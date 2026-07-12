@@ -21,7 +21,9 @@ def _import_rose() -> Any:
 
     if not hasattr(scipy.special, "sph_harm") and hasattr(scipy.special, "sph_harm_y"):
         def sph_harm(m: Any, n: Any, theta: Any, phi: Any) -> Any:
-            return scipy.special.sph_harm_y(n, m, theta, phi)
+            # legacy sph_harm took (theta=azimuthal, phi=polar);
+            # sph_harm_y takes angles in (polar, azimuthal) order
+            return scipy.special.sph_harm_y(n, m, phi, theta)
 
         scipy.special.sph_harm = sph_harm
     try:

@@ -1,3 +1,7 @@
-"""Importable snapshots of earlier LROM package milestones."""
+"""Importable snapshots of LROM package milestones.
 
-__all__ = ["N1"]
+Module names encode versions: `v1_0` is version 1.0 (formerly "N1");
+`1.0` itself is not a valid Python identifier.
+"""
+
+__all__ = ["v1_0"]

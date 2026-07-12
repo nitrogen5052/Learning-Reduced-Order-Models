@@ -54,7 +54,8 @@ be moved to another notebook or compatible device for prediction.
 - `lrom/`: new stateful public package
 - `notebooks/`: research workflows; Notebook 1 uses the new API
 - `tests/`: unit, integration, artifact, and notebook-structure tests
-- `docs/`: approved designs, plans, and deferred work
+- `docs/`: user-facing project documentation (see `docs/VERSIONING.md`)
+- `_agents/`: AI-agent working area — plans, specs, backlog, validation notebooks (see `_agents/README.md`)
 - `lrom_bench/`: temporary compatibility implementation for later notebooks
 - `scientific_archive/`: retained legacy and scientifically valuable references
 
