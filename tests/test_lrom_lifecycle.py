@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from lrom import LROM
-from lrom.errors import LROMSamplingError, LROMStateError
-from lrom.state import Kinematics, MeshState, SamplingState, TrainingState
+from lrom import LROMSamplingError, LROMStateError
+from lrom import Kinematics, MeshState, SamplingState, TrainingState
 
 
 class FakeFOMProvider:

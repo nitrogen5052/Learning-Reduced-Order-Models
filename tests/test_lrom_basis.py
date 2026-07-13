@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from lrom.basis import build_basis, project_coordinates, reconstruct
+from lrom import build_basis, project_coordinates, reconstruct
 
 
 def test_centered_basis_projects_and_reconstructs_training_space() -> None:

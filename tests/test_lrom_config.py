@@ -3,10 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from lrom.config import LROMConfig
-from lrom.errors import LROMConfigurationError
-from lrom.potentials import (
-    FULL_WOODS_SAXON_PARAMETER_NAMES,
+from lrom import LROMConfig
+from lrom import LROMConfigurationError
+from lrom import (
     KD_PARAMETER_NAMES,
     resolve_potential,
 )
@@ -29,15 +28,12 @@ def test_ws_schemas_have_named_parameters() -> None:
     ws1 = resolve_potential("ws_1")
     ws3 = resolve_potential("ws_3")
     full = resolve_potential("woods-saxon")
-    n2_full = resolve_potential("full_woods-saxon")
 
     assert ws1.parameter_names == ("Vv", "Rv", "av")
     assert ws1.sampleable_names == ("Vv",)
     assert ws3.sampleable_names == ("Vv", "Rv", "av")
     assert full.parameter_names == KD_PARAMETER_NAMES
     assert len(full.sampleable_names) == 15
-    assert n2_full.parameter_names == FULL_WOODS_SAXON_PARAMETER_NAMES
-    assert n2_full.sampleable_names == FULL_WOODS_SAXON_PARAMETER_NAMES
 
 
 def test_real_woods_saxon_uses_vv_rv_av_order() -> None:

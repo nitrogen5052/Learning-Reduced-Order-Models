@@ -37,7 +37,7 @@ def test_runtime_dependencies_are_declared() -> None:
 def test_package_discovery_includes_new_and_legacy_namespaces() -> None:
     text = (ROOT / "pyproject.toml").read_text()
 
-    assert 'include = ["lrom*", "lrom_bench*", "lrom_legacy*"]' in text
+    assert 'include = ["lrom*", "lrom_legacy*"]' in text
 
 
 def test_readme_documents_canonical_portable_workflow() -> None:

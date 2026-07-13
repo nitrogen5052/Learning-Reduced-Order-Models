@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from lrom.errors import LROMSamplingError
-from lrom.sampling import create_explicit_sampling_design, create_sampling_design
+from lrom import LROMSamplingError
+from lrom import create_explicit_sampling_design, create_sampling_design
 
 
 CENTRAL = {"Vv": 50.0, "Rv": 4.0, "av": 0.65}

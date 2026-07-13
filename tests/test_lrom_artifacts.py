@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 import lrom
-from lrom.errors import LROMArtifactError, LROMStateError
+from lrom import LROMArtifactError, LROMStateError
 
 
 def trained_emulator() -> lrom.LROM:
