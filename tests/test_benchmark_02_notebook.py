@@ -4,7 +4,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "notebooks" / "Benchmark_1.0.ipynb"
+NOTEBOOK = ROOT / "notebooks" / "benchmark_02.ipynb"
 SOURCE_NOTEBOOK = (
     "scientific_archive/legacy_code/Legacy_benchmark/notebooks/"
     "02_lrom_method_walkthrough.ipynb"
@@ -34,13 +34,13 @@ def notebook_text() -> str:
     return "\n".join(cell.source for cell in notebook.cells)
 
 
-def test_benchmark_1_0_notebook_contract() -> None:
+def test_benchmark_02_notebook_contract() -> None:
     assert NOTEBOOK.exists()
     text = notebook_text()
     assert SOURCE_NOTEBOOK in text
     assert "import rose" in text
-    assert "import lrom_legacy.v1_0 as v1" in text
-    assert "import lrom\n" not in text
+    assert "import lrom" in text
+    assert "import lrom_legacy" not in text
     assert "import lrom_bench" not in text
     assert "lrom_demo" not in text
     assert "def plot_" not in text
@@ -48,16 +48,16 @@ def test_benchmark_1_0_notebook_contract() -> None:
     assert "def build_rose_comparison" not in text
     assert "rose.ScatteringAmplitudeEmulator.from_train" in text
     assert "ROSE free-basis LS" in text
-    assert "v1.0 central-basis LS" in text
+    assert "LROM central-basis LS" in text
     for figure in FIGURES:
         assert f"# FIGURE: {figure}" in text
 
 
-def test_benchmark_1_0_code_cells_compile() -> None:
+def test_benchmark_02_code_cells_compile() -> None:
     notebook = nbformat.read(NOTEBOOK, as_version=4)
     for index, cell in enumerate(notebook.cells):
         if cell.cell_type == "code":
-            compile(cell.source, f"Benchmark_1.0 cell {index}", "exec")
+            compile(cell.source, f"benchmark_02 cell {index}", "exec")
 
 
 def test_difference_figures_use_the_1e_minus_5_display_floor() -> None:
