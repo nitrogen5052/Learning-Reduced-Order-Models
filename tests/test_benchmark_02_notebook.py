@@ -4,7 +4,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "notebooks" / "benchmark_02.ipynb"
+NOTEBOOK = ROOT / "notebooks" / "benchmark_notebooks" / "1.0" / "benchmark_02.ipynb"
 SOURCE_NOTEBOOK = (
     "scientific_archive/legacy_code/Legacy_benchmark/notebooks/"
     "02_lrom_method_walkthrough.ipynb"

@@ -1,14 +1,15 @@
 """Importable snapshots of LROM package milestones.
 
-Module names encode versions (`1.0` is not a valid Python identifier):
+Module names encode versions (`1.2` is not a valid Python identifier):
 
-- `v2_0`: the version 2.0 cross-section package (S-matrices, spin-orbit
-  channels, `observable="cross_section"`). Parked here 2026-07-13 while
-  version 1 physics is re-verified. Known fixes needed before 2.0 resumes:
-  potential predictors carry no spin-orbit parameter information
-  (Vso/Rso/aso), and the CAT per-sample timing methodology is too noisy.
+- `v1_2`: the validated version 1.2.0 single-file wavefunction package
+  (benchmark_02 medians match the legacy notebook exactly; ROSE is
+  FOM-solver-only). Snapshot taken before 2.0 development.
+- `v2_0`: the first, parked cross-section attempt. Superseded by the 2.0
+  work in the active `lrom` package; kept as the parts donor. Known flaws:
+  spin-orbit-blind potential predictors and noisy CAT timing.
 
-The version 1 package is the active top-level `lrom` package.
+The active package is the top-level single-file `lrom`.
 """
 
-__all__ = ["v2_0"]
+__all__ = ["v1_2", "v2_0"]
