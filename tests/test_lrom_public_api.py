@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_public_package_exports() -> None:
-    assert lrom.__version__ == "1.1.0"
+    assert lrom.__version__ == "1.2.0"
     assert lrom.LROM.__name__ == "LROM"
     assert callable(lrom.load)
 

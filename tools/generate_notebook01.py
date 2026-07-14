@@ -6,7 +6,7 @@ import textwrap
 import nbformat as nbf
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_PATH = ROOT / "notebooks" / "01_rbm_vs_lrom_single_wavefunction.ipynb"
 
 
@@ -66,6 +66,12 @@ def notebook_cells() -> list:
             '    if name == "lrom" or name.startswith("lrom."):',
             "        del sys.modules[name]",
             "",
+            "import scipy.special",
+            'if not hasattr(scipy.special, "sph_harm") and hasattr(scipy.special, "sph_harm_y"):',
+            "    # legacy sph_harm took (theta=azimuthal, phi=polar); sph_harm_y takes (polar, azimuthal)",
+            "    scipy.special.sph_harm = lambda m, n, theta, phi: scipy.special.sph_harm_y(n, m, phi, theta)",
+            "",
+            "import rose",
             "import lrom",
             "",
             'plt.rcParams["figure.dpi"] = 130',
@@ -85,7 +91,10 @@ def notebook_cells() -> list:
             exact $l=0$ channel of $^{40}$Ca(n,n) at 14.1 MeV.
 
             All horizontal axes use physical radius $r$ in fm. The package owns
-            numerical state; the short plotting cells remain visible here.
+            LROM numerical state; the ROSE comparison is constructed here in the
+            notebook with the public `nuclear-rose` package, sharing the exact
+            `phi0` and basis vectors the package built, so Galerkin and learned
+            coefficients live in the same reduced space.
             """
         ),
         md(
@@ -145,6 +154,32 @@ def notebook_cells() -> list:
             print("central parameters:", dict(vv_emulator.central_parameters))
             print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
             print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
+
+            # Notebook-owned ROSE emulator on the package's exact reduced basis:
+            # hand ROSE the same phi0 and basis vectors, then let it do Galerkin.
+            vv_rose_basis = rose.basis.CustomBasis(
+                solutions=np.asarray(vv_emulator.samples.training_wavefunctions[0], dtype=np.complex128).T.copy(),
+                phi_0=np.asarray(vv_emulator.samples.central_wavefunctions[0], dtype=np.complex128).copy(),
+                rho_mesh=vv_emulator.samples.mesh.rho,
+                n_basis=4,
+                solver=vv_emulator.full_order_model[0].solver,
+                subtract_phi0=True,
+                use_svd=True,
+                center=False,
+                scale=False,
+            )
+            vv_rose_basis.vectors = np.asarray(vv_emulator.basis[0].vectors, dtype=np.complex128)
+            vv_rose_basis.phi_0 = np.asarray(vv_emulator.basis[0].phi0, dtype=np.complex128)
+            vv_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
+                vv_emulator.full_order_model[0].interaction,
+                vv_rose_basis,
+                s_0=vv_emulator.full_order_model[0].base_solver.s_0,
+                initialize_emulator=True,
+            )
+            vv_test_rows = vv_emulator.samples.design.testing.values
+            vv_rose_coefficients = np.asarray([vv_rose_rbe.coefficients(row) for row in vv_test_rows])
+            vv_rose_wavefunctions = np.asarray([vv_rose_rbe.emulate_wave_function(row) for row in vv_test_rows])
+            vv_fom_test = vv_emulator.samples.testing_wavefunctions[0]
             """
         ),
         code(
@@ -184,7 +219,8 @@ def notebook_cells() -> list:
             plt.show()
 
             vv_test = vv_emulator.samples.design.testing.values[:, 0]
-            coefficients = vv_emulator.testing_results.coefficients
+            coefficients = {key: dict(value) for key, value in vv_emulator.testing_results.coefficients.items()}
+            coefficients["rose"] = {0: vv_rose_coefficients}
             vv_train_low, vv_train_high = vv_training_ranges["Vv"]
             fig, axes = plt.subplots(2, 2, figsize=(11.0, 6.2), sharex="col")
             for coefficient_index in range(2):
@@ -237,13 +273,13 @@ def notebook_cells() -> list:
             axes[0].plot(vv_case.radius, np.real(vv_case.high_fidelity[0]), color="black", label="true test solution")
             axes[0].plot(vv_case.radius, np.real(vv_case.ls[0]), "-.", color="blue", label="LS")
             axes[0].plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
-            axes[0].plot(vv_case.radius, np.real(vv_case.rose[0]), "--", color="red", label="ROSE")
+            axes[0].plot(vv_case.radius, np.real(vv_rose_wavefunctions[vv_representative_index]), "--", color="red", label="ROSE")
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"40Ca(n,n), l=0 central Vv testing solution: {vv_representative_id}")
             axes[0].legend()
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.ls[0]), 1e-16), color="blue", label="LS")
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), 1e-16), color="orange", label="LROM")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.rose[0]), 1e-16), color="red", label="ROSE")
+            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index]), 1e-16), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
             axes[1].set_ylabel("absolute difference")
@@ -254,7 +290,8 @@ def notebook_cells() -> list:
         ),
         code(
             """
-            vv_errors = vv_emulator.testing_errors[0]
+            vv_errors = dict(vv_emulator.testing_errors[0])
+            vv_errors["rose"] = np.abs(vv_rose_wavefunctions - vv_fom_test)
             fig, ax = plt.subplots(figsize=(7.2, 4.0))
             for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
                 for error in vv_errors[method]:
@@ -317,6 +354,36 @@ def notebook_cells() -> list:
                 predictor="potential",
                 predictor_count=6,
             )
+
+            # Same notebook-owned ROSE construction as Section 1, on the ws_3 basis.
+            ws3_rose_basis = rose.basis.CustomBasis(
+                solutions=np.asarray(ws3_emulator.samples.training_wavefunctions[0], dtype=np.complex128).T.copy(),
+                phi_0=np.asarray(ws3_emulator.samples.central_wavefunctions[0], dtype=np.complex128).copy(),
+                rho_mesh=ws3_emulator.samples.mesh.rho,
+                n_basis=4,
+                solver=ws3_emulator.full_order_model[0].solver,
+                subtract_phi0=True,
+                use_svd=True,
+                center=False,
+                scale=False,
+            )
+            ws3_rose_basis.vectors = np.asarray(ws3_emulator.basis[0].vectors, dtype=np.complex128)
+            ws3_rose_basis.phi_0 = np.asarray(ws3_emulator.basis[0].phi0, dtype=np.complex128)
+            ws3_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
+                ws3_emulator.full_order_model[0].interaction,
+                ws3_rose_basis,
+                s_0=ws3_emulator.full_order_model[0].base_solver.s_0,
+                initialize_emulator=True,
+            )
+            ws3_train_rows = ws3_emulator.samples.design.training.values
+            ws3_test_rows = ws3_emulator.samples.design.testing.values
+            ws3_rose_coefficients = np.asarray([ws3_rose_rbe.coefficients(row) for row in ws3_test_rows])
+            ws3_rose_wf_train = np.asarray([ws3_rose_rbe.emulate_wave_function(row) for row in ws3_train_rows])
+            ws3_rose_wf_test = np.asarray([ws3_rose_rbe.emulate_wave_function(row) for row in ws3_test_rows])
+            ws3_fom_train = ws3_emulator.samples.training_wavefunctions[0]
+            ws3_fom_test = ws3_emulator.samples.testing_wavefunctions[0]
+            ws3_rose_rel_train = np.linalg.norm(ws3_rose_wf_train - ws3_fom_train, axis=1) / np.linalg.norm(ws3_fom_train, axis=1)
+            ws3_rose_rel_test = np.linalg.norm(ws3_rose_wf_test - ws3_fom_test, axis=1) / np.linalg.norm(ws3_fom_test, axis=1)
             print("potential predictor radii [fm]:", ws3_emulator.predictors.selected_radii)
             """
         ),
@@ -357,7 +424,8 @@ def notebook_cells() -> list:
             ax.legend()
             plt.show()
 
-            coefficients = ws3_emulator.testing_results.coefficients
+            coefficients = {key: dict(value) for key, value in ws3_emulator.testing_results.coefficients.items()}
+            coefficients["rose"] = {0: ws3_rose_coefficients}
             case_number = np.arange(ws3_emulator.samples.design.testing.values.shape[0])
             fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.0), sharex=True)
             for method, color in (("ls", "blue"), ("lrom", "orange"), ("rose", "red")):
@@ -409,13 +477,13 @@ def notebook_cells() -> list:
             axes[0].plot(case.radius, np.real(case.high_fidelity[0]), color="black", label="high fidelity")
             axes[0].plot(case.radius, np.real(case.ls[0]), "-.", color="blue", label="LS")
             axes[0].plot(case.radius, np.real(case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
-            axes[0].plot(case.radius, np.real(case.rose[0]), "--", color="red", label="ROSE")
+            axes[0].plot(case.radius, np.real(ws3_rose_wf_test[representative_index]), "--", color="red", label="ROSE")
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"Representative l=0 testing solution: {representative_id}")
             axes[0].legend()
             axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.ls[0]), 1e-16), color="blue", label="LS")
             axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), 1e-16), color="orange", label="LROM")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.rose[0]), 1e-16), color="red", label="ROSE")
+            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index]), 1e-16), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
             axes[1].set_ylabel("absolute difference")
@@ -429,8 +497,10 @@ def notebook_cells() -> list:
             methods = ("ls", "lrom", "rose")
             colors = ("blue", "orange", "red")
             positions = np.arange(1, 4)
-            training_metrics = ws3_emulator.training_results.metrics["relative_l2"][0]
-            testing_metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]
+            training_metrics = dict(ws3_emulator.training_results.metrics["relative_l2"][0])
+            training_metrics["rose"] = ws3_rose_rel_train
+            testing_metrics = dict(ws3_emulator.testing_results.metrics["relative_l2"][0])
+            testing_metrics["rose"] = ws3_rose_rel_test
             training_values = [
                 np.log10(np.maximum(training_metrics[method], 1e-16))
                 for method in methods
@@ -484,7 +554,8 @@ def notebook_cells() -> list:
                 interpolation &= (test_values[:, column] >= low) & (test_values[:, column] <= high)
 
             rows = []
-            metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]
+            metrics = dict(ws3_emulator.testing_results.metrics["relative_l2"][0])
+            metrics["rose"] = ws3_rose_rel_test
             for region, mask in (("interpolation", interpolation), ("extrapolation", ~interpolation)):
                 for method in ("rose", "lrom", "ls"):
                     values = metrics[method][mask]

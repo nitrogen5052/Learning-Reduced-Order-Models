@@ -25,7 +25,7 @@ and so on. This replaces the earlier `Benchmark_<version>` naming.
 
 ## Milestone flow
 
-The project goal (see `_agents/backlog/paper-results-roadmap.md`, distilled
+The project goal (see `.agents/backlog/paper-results-roadmap.md`, distilled
 from the Paper Results Map) is a series of paper notebooks. Each package
 milestone is validated against the corresponding archived legacy notebook
 before its paper notebook is finalized. Version 1 physics is currently being

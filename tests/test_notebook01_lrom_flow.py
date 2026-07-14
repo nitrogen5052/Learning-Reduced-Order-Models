@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from _agents.scripts import generate_notebook01
+from tools import generate_notebook01
 
 
 def source() -> str:
@@ -41,7 +41,7 @@ def test_notebook01_plots_required_physical_diagnostics_explicitly() -> None:
     assert "selected_radii" in text
     assert "selected potential predictor points" in text.lower()
     assert "np.real(case.high_fidelity[0])" in text
-    assert "np.real(case.rose[0])" in text
+    assert "np.real(ws3_rose_wf_test[representative_index])" in text
     assert "np.real(case.lrom[0])" in text
     assert "vv_emulator.testing_errors[0]" in text
     assert 'ax.set_yscale("log")' in text
@@ -77,25 +77,30 @@ def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
 
     assert "vv_representative_index = len(vv_test) // 2" in text
     assert "vv_emulator.testing_case(case_id=vv_representative_id)" in text
-    for method in ("high_fidelity", "ls", "lrom", "rose"):
+    for method in ("high_fidelity", "ls", "lrom"):
         assert f"vv_case.{method}[0]" in text
-    for method in ("ls", "lrom", "rose"):
+    assert "vv_rose_wavefunctions[vv_representative_index]" in text
+    for method in ("ls", "lrom"):
         assert f"np.abs(vv_case.high_fidelity[0] - vv_case.{method}[0])" in text
+    assert "np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index])" in text
 
 
 def test_ws3_coefficients_and_wavefunction_include_absolute_differences() -> None:
     text = source()
 
     assert "np.abs(ws3_ls_coefficients - method_coefficients)" in text
-    for method in ("ls", "lrom", "rose"):
+    for method in ("ls", "lrom"):
         assert f"np.abs(case.high_fidelity[0] - case.{method}[0])" in text
+    assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text
 
 
 def test_ws3_final_figure_is_relative_l2_violin_comparison() -> None:
     text = source()
 
-    assert 'training_metrics = ws3_emulator.training_results.metrics["relative_l2"][0]' in text
-    assert 'testing_metrics = ws3_emulator.testing_results.metrics["relative_l2"][0]' in text
+    assert 'training_metrics = dict(ws3_emulator.training_results.metrics["relative_l2"][0])' in text
+    assert 'training_metrics["rose"] = ws3_rose_rel_train' in text
+    assert 'testing_metrics = dict(ws3_emulator.testing_results.metrics["relative_l2"][0])' in text
+    assert 'testing_metrics["rose"] = ws3_rose_rel_test' in text
     assert "training_violin = ax.violinplot(" in text
     assert "testing_violin = ax.violinplot(" in text
     assert 'training_violin["bodies"]' in text

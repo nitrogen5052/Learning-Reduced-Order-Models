@@ -78,7 +78,6 @@ class FakeTrainingEngine:
             basis={channel: f"basis-{channel}" for channel in emulator.partial_waves},
             predictors={"kind": predictor, "count": predictor_count},
             rf_lrom={channel: f"model-{channel}" for channel in emulator.partial_waves},
-            rose_rbm={channel: f"rose-{channel}" for channel in emulator.partial_waves},
             testing_results={"basis_size": basis_size},
             testing_errors={channel: {} for channel in emulator.partial_waves},
         )

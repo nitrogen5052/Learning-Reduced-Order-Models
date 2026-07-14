@@ -64,7 +64,7 @@ snapshot commit `56ff147`).
 ### 2026-07-09 .. 2026-07-12 — version 1.0 consolidation (Claude sessions)
 - `79d93fa` Version 1.0: naming consistency, sph_harm fix, and agent-area
   restructure (N1 → 1.0 labels, `lrom_legacy.v1_0` rename,
-  `Benchmark_1.0.ipynb`, `_agents/` area, project CLAUDE.md)
+  `Benchmark_1.0.ipynb`, `.agents/` area, project CLAUDE.md)
 - `ee6320e` Benchmark_1.0: global scan windows/axes and coefficient blow-up
   diagnosis (VV 30–70 MeV, RV 3–5 fm, ERROR_YMAX; spurious pole of the
   learned implicit operator at p_Rv ≈ +3.2)
@@ -76,10 +76,10 @@ snapshot commit `56ff147`).
 
 ## Recovered artifacts
 
-- `_agents/superpowers/plans/2026-06-30-benchmark-n1-notebook.md` and
+- `.agents/superpowers/plans/2026-06-30-benchmark-n1-notebook.md` and
   `2026-06-30-n1-rose-rom-separation.md`: extracted verbatim from Codex
   rollout patches.
-- `_agents/superpowers/specs/2026-06-30-benchmark-n1-notebook-design.md`:
+- `.agents/superpowers/specs/2026-06-30-benchmark-n1-notebook-design.md`:
   restored from the reviewing agent's session context.
 - `scientific_archive/recovered_2026-07-13/`: a readable Codex-worktree
   variant of legacy notebook 01 (larger than the archived copy) and the
@@ -90,7 +90,7 @@ snapshot commit `56ff147`).
 - Git object history (diffs) between 2026-06-15 and 2026-07-12.
 - `scientific_archive/references/Paper Results Map.pdf` and
   `ROSEPaper[7945].pdf` (committed locally 2026-07-09, evicted before any
-  push; the roadmap distillation `_agents/backlog/paper-results-roadmap.md`
+  push; the roadmap distillation `.agents/backlog/paper-results-roadmap.md`
   survives via origin). Re-add from the user's original sources.
 - The July working-tree revision of `notebooks/02_lrom_method_walkthrough.ipynb`
   (superseded by the planned version 2.0 notebook 02 anyway).

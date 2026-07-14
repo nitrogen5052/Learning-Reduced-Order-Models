@@ -52,7 +52,7 @@ another notebook or machine for prediction.
   notebook 02 — benchmarks are named after the legacy notebook they recreate)
 - `tests/`: unit, integration, artifact, and notebook-contract tests
 - `docs/`: user-facing documentation (`VERSIONING.md`)
-- `_agents/`: AI-agent working area (plans, specs, backlog)
+- `.agents/`: AI-agent working area (plans, specs, backlog)
 - `scientific_archive/`: read-only legacy code and references
 
 Supported Python versions are 3.11, 3.12, and 3.13.

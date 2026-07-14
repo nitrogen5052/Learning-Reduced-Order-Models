@@ -44,7 +44,7 @@ def test_potential_predictor_selects_physical_radii() -> None:
     assert state.testing_features.shape == (1, 2)
 
 
-def test_real_ws1_training_stores_shared_rose_lrom_state() -> None:
+def test_real_ws1_training_stores_lrom_state() -> None:
     emulator = LROM(
         target=(40, 20),
         projectile=(1, 0),
@@ -66,26 +66,22 @@ def test_real_ws1_training_stores_shared_rose_lrom_state() -> None:
     emulator.train(basis_size=2, predictor="parameters")
 
     assert emulator.is_trained
-    assert emulator.basis[0] is emulator.rose_rbm[0].basis
     assert emulator.basis[0].vectors.shape == (96, 2)
     assert emulator.predictors.kind == "parameters"
     assert emulator.rf_lrom[0].n_basis == 2
     assert emulator.testing_results.high_fidelity[0].shape == (5, 96)
-    assert emulator.testing_results.rose[0].shape == (5, 96)
     assert emulator.testing_results.lrom[0].shape == (5, 96)
     assert emulator.testing_results.ls[0].shape == (5, 96)
-    assert emulator.testing_results.metrics["relative_l2"][0]["rose"].shape == (5,)
     assert emulator.testing_results.metrics["relative_l2"][0]["lrom"].shape == (5,)
     assert emulator.training_results.high_fidelity[0].shape == (5, 96)
     for results in (emulator.training_results, emulator.testing_results):
-        for method in ("rose", "lrom", "ls"):
+        for method in ("lrom", "ls"):
             assert results.coefficients[method][0].shape == (5, 2)
             assert results.metrics["relative_l2"][0][method].shape == (5,)
             assert results.metrics["pointwise_absolute"][0][method].shape == (
                 5,
                 96,
             )
-    assert emulator.testing_errors[0]["rose"].shape == (5, 96)
     assert emulator.testing_errors[0]["lrom"].shape == (5, 96)
     assert emulator.testing_errors[0]["ls"].shape == (5, 96)
 
@@ -94,7 +90,6 @@ def test_real_ws1_training_stores_shared_rose_lrom_state() -> None:
     assert case.parameters["Vv"] == 50.0
     assert case.radius.shape == (96,)
     assert case.high_fidelity[0].shape == (96,)
-    assert case.rose[0].shape == (96,)
     assert case.lrom[0].shape == (96,)
     assert case.ls[0].shape == (96,)
 

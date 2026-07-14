@@ -393,7 +393,6 @@ class TrainingState:
     basis: Mapping[int, Any]
     predictors: Any
     rf_lrom: Mapping[int, Any]
-    rose_rbm: Mapping[int, Any]
     testing_results: Any
     testing_errors: Mapping[int, Any]
     training_results: Any = None
@@ -429,20 +428,10 @@ class BasisState:
 
 
 @dataclass(frozen=True)
-class RoseRBMState:
-    """Live ROSE emulator sharing one authoritative reduced basis."""
-
-    basis: BasisState
-    custom_basis: Any
-    emulator: Any
-
-
-@dataclass(frozen=True)
 class TestingResults:
     """Testing-set wavefunctions produced by every approved method."""
 
     high_fidelity: Mapping[int, np.ndarray]
-    rose: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
     ls: Mapping[int, np.ndarray]
     coefficients: Mapping[str, Mapping[int, np.ndarray]]
@@ -467,7 +456,6 @@ class TestingCase:
     parameters: Mapping[str, float]
     radius: np.ndarray
     high_fidelity: Mapping[int, np.ndarray]
-    rose: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
     ls: Mapping[int, np.ndarray]
 
@@ -1326,38 +1314,13 @@ def _trained_channels(emulator) -> tuple:
     return tuple(sorted(emulator.samples.full_order_models, key=_channel_sort_key))
 
 
-def _shared_rose_basis(*, emulator, channel, basis_size: int) -> RoseRBMState:
-    rose = _import_rose()
+def _centered_basis(*, emulator, channel, basis_size: int) -> BasisState:
     samples = emulator.samples
-    model = samples.full_order_models[channel]
-    custom_basis = rose.basis.CustomBasis(
-        solutions=np.asarray(samples.training_wavefunctions[channel], dtype=np.complex128).T.copy(),
-        phi_0=np.asarray(samples.central_wavefunctions[channel], dtype=np.complex128).copy(),
-        rho_mesh=samples.mesh.rho,
-        n_basis=basis_size,
-        solver=model.solver,
-        subtract_phi0=True,
-        use_svd=True,
-        center=False,
-        scale=False,
-    )
-    singular_values = np.asarray(custom_basis.singular_values, dtype=float)[:basis_size]
-    basis = BasisState(
-        phi0=custom_basis.phi_0,
-        vectors=custom_basis.vectors,
+    return build_basis(
+        phi0=np.asarray(samples.central_wavefunctions[channel], dtype=np.complex128),
+        snapshots=np.asarray(samples.training_wavefunctions[channel], dtype=np.complex128),
         radius=samples.mesh.radius,
-        singular_values=singular_values,
-    )
-    rose_emulator = rose.reduced_basis_emulator.ReducedBasisEmulator(
-        model.interaction,
-        custom_basis,
-        s_0=model.base_solver.s_0,
-        initialize_emulator=True,
-    )
-    return RoseRBMState(
-        basis=basis,
-        custom_basis=custom_basis,
-        emulator=rose_emulator,
+        basis_size=basis_size,
     )
 
 
@@ -1394,19 +1357,15 @@ def _evaluate(
     *,
     emulator,
     bases,
-    rose_states,
     rf_models,
     wavefunctions,
-    parameter_values,
     predictor_features,
 ) -> TestingResults:
     high_fidelity = dict(wavefunctions)
-    rose_wavefunctions = {}
     lrom_wavefunctions = {}
     ls_wavefunctions = {}
     coefficient_sets: dict[str, dict[object, np.ndarray]] = {
         "ls": {},
-        "rose": {},
         "lrom": {},
     }
     pointwise_metrics: dict[object, dict[str, np.ndarray]] = {}
@@ -1421,13 +1380,8 @@ def _evaluate(
             model=rf_models[channel],
             predictors=predictor_features,
         )
-        rose_model = rose_states[channel].emulator
-        rose_coordinates = np.asarray(
-            [rose_model.coefficients(row) for row in parameter_values]
-        )
         coefficient_sets["ls"][channel] = ls_coordinates
         coefficient_sets["lrom"][channel] = lrom_coordinates
-        coefficient_sets["rose"][channel] = rose_coordinates
         ls_wavefunctions[channel] = reconstruct(
             basis=basis,
             coordinates=ls_coordinates,
@@ -1436,11 +1390,7 @@ def _evaluate(
             basis=basis,
             coordinates=lrom_coordinates,
         )
-        rose_wavefunctions[channel] = np.asarray(
-            [rose_model.emulate_wave_function(row) for row in parameter_values]
-        )
         predictions = {
-            "rose": rose_wavefunctions[channel],
             "lrom": lrom_wavefunctions[channel],
             "ls": ls_wavefunctions[channel],
         }
@@ -1460,7 +1410,6 @@ def _evaluate(
         }
     return TestingResults(
         high_fidelity=high_fidelity,
-        rose=rose_wavefunctions,
         lrom=lrom_wavefunctions,
         ls=ls_wavefunctions,
         coefficients=coefficient_sets,
@@ -1472,20 +1421,24 @@ def _evaluate(
 
 
 class TrainingEngine:
-    """Build shared ROSE/LROM bases, fits, and testing diagnostics."""
+    """Build centered LROM bases, fits, and testing diagnostics.
+
+    ROSE is used only as the full-order solver during sampling; all ROSE
+    emulator comparisons are constructed in the notebooks with the public
+    nuclear-rose package.
+    """
 
     def reduced_basis(self, *, emulator, basis_size: int) -> TrainingState:
-        rose_states = {
-            channel: _shared_rose_basis(
+        bases = {
+            channel: _centered_basis(
                 emulator=emulator, channel=channel, basis_size=basis_size
             )
             for channel in _trained_channels(emulator)
         }
         return TrainingState(
-            basis={channel: state.basis for channel, state in rose_states.items()},
+            basis=bases,
             predictors=None,
             rf_lrom={},
-            rose_rbm=rose_states,
             testing_results=None,
             testing_errors={channel: {} for channel in _trained_channels(emulator)},
             training_options={"basis_size": basis_size},
@@ -1505,7 +1458,6 @@ class TrainingEngine:
         )
         samples = emulator.samples
         bases = basis_only.basis
-        rose_states = basis_only.rose_rbm
         rf_models = {}
         for channel in _trained_channels(emulator):
             basis = bases[channel]
@@ -1520,26 +1472,21 @@ class TrainingEngine:
         training_results = _evaluate(
             emulator=emulator,
             bases=bases,
-            rose_states=rose_states,
             rf_models=rf_models,
             wavefunctions=samples.training_wavefunctions,
-            parameter_values=samples.design.training.values,
             predictor_features=predictor_state.training_features,
         )
         testing_results = _evaluate(
             emulator=emulator,
             bases=bases,
-            rose_states=rose_states,
             rf_models=rf_models,
             wavefunctions=samples.testing_wavefunctions,
-            parameter_values=samples.design.testing.values,
             predictor_features=predictor_state.testing_features,
         )
         return TrainingState(
             basis=bases,
             predictors=predictor_state,
             rf_lrom=rf_models,
-            rose_rbm=rose_states,
             testing_results=testing_results,
             testing_errors=testing_results.metrics["pointwise_absolute"],
             training_results=training_results,
@@ -1797,7 +1744,6 @@ def load_artifact(*, path: str | Path) -> LROM:
             basis=bases,
             predictors=predictor,
             rf_lrom=models,
-            rose_rbm={},
             testing_results=None,
             testing_errors={channel: {} for channel in bases},
         )
@@ -1913,10 +1859,6 @@ class LROM:
     @property
     def rf_lrom(self) -> Mapping[int, Any] | None:
         return None if self._training_state is None else self._training_state.rf_lrom
-
-    @property
-    def rose_rbm(self) -> Mapping[int, Any] | None:
-        return None if self._training_state is None else self._training_state.rose_rbm
 
     @property
     def testing_results(self) -> Any:
@@ -2115,7 +2057,6 @@ class LROM:
                 channel: values[index]
                 for channel, values in results.high_fidelity.items()
             },
-            rose={channel: values[index] for channel, values in results.rose.items()},
             lrom={channel: values[index] for channel, values in results.lrom.items()},
             ls={channel: values[index] for channel, values in results.ls.items()},
         )
@@ -2130,7 +2071,7 @@ class LROM:
 # public surface
 # ==========================================================================
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 
 def load(*, path: str | Path) -> LROM:
