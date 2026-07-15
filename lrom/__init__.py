@@ -103,6 +103,59 @@ def real_woods_saxon(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return -vv / (1.0 + np.exp(exponent))
 
 
+MASS_PION = 139.57039  # MeV, sets the conventional spin-orbit scale
+
+FULL_WOODS_SAXON_PARAMETER_NAMES = (
+    "Vv", "Wv", "Wd", "Vso", "Rv", "Rd", "Rso", "av", "ad", "aso",
+)
+
+# ROSE KD_simple sign convention: Wv and Wd are positive and both imaginary
+# terms are absorptive. Rso depends on the target mass and is filled in by
+# full_woods_saxon_central().
+_FULL_WOODS_SAXON_CENTRAL_BASE = {
+    "Vv": 46.7238,
+    "Wv": 1.72334,
+    "Wd": 7.2357,
+    "Vso": 6.1,
+    "Rv": 4.0538,
+    "Rd": 4.4055,
+    "av": 0.6718,
+    "ad": 0.5379,
+    "aso": 0.60,
+}
+
+
+def full_woods_saxon_central(*, target_a: int) -> dict[str, float]:
+    """Central full Woods-Saxon parameters with Rso derived from the target."""
+    central = dict(_FULL_WOODS_SAXON_CENTRAL_BASE)
+    central["Rso"] = 1.01 * float(target_a) ** (1.0 / 3.0)
+    return central
+
+
+def full_woods_saxon(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    """Central complex full Woods-Saxon terms (volume + surface)."""
+    radius = np.asarray(r, dtype=float)
+    vv, wv, wd, _vso, rv, rd, _rso, av, ad, _aso = np.asarray(alpha, dtype=float)
+    if av <= 0.0 or ad <= 0.0:
+        raise ValueError("av and ad must be positive")
+    volume_exponent = np.clip((radius - rv) / av, -700.0, 700.0)
+    surface_exponent = np.clip((radius - rd) / ad, -700.0, 700.0)
+    volume = 1.0 / (1.0 + np.exp(volume_exponent))
+    surface_exp = np.exp(surface_exponent)
+    surface_prime = -(surface_exp / ad) / (1.0 + surface_exp) ** 2
+    return -vv * volume - 1j * wv * volume + 4j * ad * wd * surface_prime
+
+
+def full_woods_saxon_spin_orbit(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    """Radial spin-orbit form factor (the l.s factor is applied per channel)."""
+    radius = np.asarray(r, dtype=float)
+    _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = np.asarray(alpha, dtype=float)
+    exponent = np.clip((radius - rso) / aso, -700.0, 700.0)
+    ex = np.exp(exponent)
+    fprime = -(ex / aso) / (1.0 + ex) ** 2
+    return vso / MASS_PION**2 * fprime / radius
+
+
 
 
 @dataclass(frozen=True)
@@ -113,6 +166,7 @@ class PotentialSpec:
     function: PotentialFunction | None
     parameter_names: tuple[str, ...]
     sampleable_names: tuple[str, ...]
+    spin_orbit_function: PotentialFunction | None = None
 
 
 _BUILTINS = {
@@ -133,6 +187,13 @@ _BUILTINS = {
         function=None,
         parameter_names=KD_PARAMETER_NAMES,
         sampleable_names=KD_PARAMETER_NAMES,
+    ),
+    "full_woods-saxon": PotentialSpec(
+        name="full_woods-saxon",
+        function=full_woods_saxon,
+        parameter_names=FULL_WOODS_SAXON_PARAMETER_NAMES,
+        sampleable_names=FULL_WOODS_SAXON_PARAMETER_NAMES,
+        spin_orbit_function=full_woods_saxon_spin_orbit,
     ),
 }
 
@@ -384,6 +445,10 @@ class SamplingState:
     training_potentials: np.ndarray
     testing_potentials: np.ndarray
     full_order_models: Mapping[int, Any]
+    interaction_space: Any = None
+    central_spin_orbit: np.ndarray | None = None
+    training_spin_orbit: np.ndarray | None = None
+    testing_spin_orbit: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -446,6 +511,25 @@ class PredictionState:
     parameters: np.ndarray
     coefficients: Mapping[int, np.ndarray]
     wavefunctions: Mapping[int, np.ndarray]
+    smatrix: Any = None
+    cross_sections: Any = None
+
+
+@dataclass(frozen=True)
+class SmatrixState:
+    """Predicted spin-up/down S-matrix arrays for a parameter batch."""
+
+    partial_waves: tuple[int, ...]
+    splus: np.ndarray
+    sminus: np.ndarray
+
+
+@dataclass(frozen=True)
+class CrossSectionState:
+    """Predicted differential cross sections for a parameter batch."""
+
+    angles_degrees: np.ndarray
+    values: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -855,6 +939,7 @@ class PredictorState:
     selected_radii: np.ndarray
     central_values: np.ndarray
     singular_values: np.ndarray
+    selected_components: Any = None  # 0 = central profile, 1 = spin-orbit profile
 
 
 def build_parameter_predictor(
@@ -916,26 +1001,57 @@ def build_potential_predictor(
     testing_potentials: np.ndarray,
     predictor_count: int,
     minimum_radius: float = 0.0,
+    central_spin_orbit: np.ndarray | None = None,
+    training_spin_orbit: np.ndarray | None = None,
+    testing_spin_orbit: np.ndarray | None = None,
 ) -> PredictorState:
-    """Select informative potential locations with SVD and greedy maxvol."""
+    """Select informative potential locations with SVD and greedy maxvol.
+
+    When spin-orbit profiles are supplied, the selection runs over the
+    stacked [central; spin-orbit] radial profiles so the predictors respond
+    to every varied parameter, including Vso/Rso/aso.
+    """
     radius = np.asarray(radius, dtype=float)
     central = np.asarray(central_potential)
     training = np.asarray(training_potentials)
     testing = np.asarray(testing_potentials)
     if training.ndim != 2 or testing.ndim != 2 or central.shape != radius.shape:
         raise ValueError("potential arrays must use (samples, radius) shapes")
+    components = np.zeros(radius.size, dtype=int)
+    if central_spin_orbit is not None:
+        radius = np.concatenate([radius, radius])
+        components = np.concatenate([components, np.ones(components.size, dtype=int)])
+        central = np.concatenate([central, np.asarray(central_spin_orbit)])
+        training = np.hstack([training, np.asarray(training_spin_orbit)])
+        testing = np.hstack([testing, np.asarray(testing_spin_orbit)])
     allowed = np.flatnonzero(radius >= minimum_radius)
     delta = (training - central[np.newaxis, :]).T
-    u, singular_values, _vh = np.linalg.svd(delta[allowed], full_matrices=False)
+    # The spin-orbit profile is orders of magnitude smaller than the central
+    # potential, so selection runs on per-block variance-normalized deltas:
+    # each profile block competes on the SHAPE of its variation, not its
+    # absolute scale. Features themselves stay per-point normalized below.
+    selection_weights = np.ones(radius.size)
+    allowed_mask = radius >= minimum_radius
+    for component in np.unique(components):
+        block = components == component
+        block_std = float(np.std(np.abs(delta[block & allowed_mask])))
+        if block_std > 0.0:
+            selection_weights[block] = 1.0 / block_std
+    weighted = delta * selection_weights[:, np.newaxis]
+    u, singular_values, _vh = np.linalg.svd(weighted[allowed], full_matrices=False)
     if predictor_count < 1 or predictor_count > min(u.shape):
         raise ValueError("predictor_count exceeds the available potential rank")
     local = _greedy_maxvol_indices(u[:, :predictor_count])
     selected = allowed[local]
     raw_training = training[:, selected] - central[selected][np.newaxis, :]
     scales = np.maximum(np.std(raw_training, axis=0), 1e-12)
+    labels = {0: "U", 1: "Uso"}
     return PredictorState(
         kind="potential",
-        names=tuple(f"U(r={radius[index]:.8g})" for index in selected),
+        names=tuple(
+            f"{labels[int(components[index])]}(r={radius[index]:.8g})"
+            for index in selected
+        ),
         parameter_names=(),
         parameter_indices=np.empty(0, dtype=int),
         center=np.empty(0),
@@ -946,6 +1062,7 @@ def build_potential_predictor(
         selected_radii=radius[selected],
         central_values=central[selected],
         singular_values=singular_values,
+        selected_components=components[selected],
     )
 
 
@@ -954,6 +1071,7 @@ def features_for_values(
     predictor: PredictorState,
     values: np.ndarray,
     potential_function=None,
+    spin_orbit_function=None,
 ) -> np.ndarray:
     """Apply a fitted predictor transformation to new ordered parameter rows."""
     values = np.asarray(values, dtype=float)
@@ -966,9 +1084,19 @@ def features_for_values(
         ) / predictor.scales[np.newaxis, :]
     if potential_function is None:
         raise ValueError("potential predictor requires a potential function")
-    raw = np.asarray(
-        [potential_function(predictor.selected_radii, row) for row in values]
-    )
+    components = predictor.selected_components
+    rows = []
+    for row in values:
+        central_values = np.asarray(potential_function(predictor.selected_radii, row))
+        if components is not None and np.any(np.asarray(components) == 1):
+            if spin_orbit_function is None:
+                raise ValueError(
+                    "spin-orbit-aware predictor requires a spin-orbit function"
+                )
+            so_values = np.asarray(spin_orbit_function(predictor.selected_radii, row))
+            central_values = np.where(np.asarray(components) == 1, so_values, central_values)
+        rows.append(central_values)
+    raw = np.asarray(rows)
     return (raw - predictor.central_values[np.newaxis, :]) / predictor.scales[np.newaxis, :]
 
 
@@ -1099,12 +1227,43 @@ def _real_ws_interaction(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return -vv / (1.0 + np.exp((r - rv) / av))
 
 
+@njit
+def _ws_shape(r: np.ndarray, R: float, a: float) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp((r - R) / a))
+
+
+@njit
+def _ws_shape_prime(r: np.ndarray, R: float, a: float) -> np.ndarray:
+    ex = np.exp((r - R) / a)
+    return -(ex / a) / (1.0 + ex) ** 2
+
+
+@njit
+def _full_ws_interaction(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    # ROSE KD_simple sign convention: both imaginary terms are absorptive
+    # for positive Wv and Wd.
+    vv, wv, wd, _vso, rv, rd, _rso, av, ad, _aso = alpha
+    return (
+        -vv * _ws_shape(r, rv, av)
+        - 1j * wv * _ws_shape(r, rv, av)
+        + 4j * ad * wd * _ws_shape_prime(r, rd, ad)
+    )
+
+
+@njit
+def _full_ws_spin_orbit(r: np.ndarray, alpha: np.ndarray, ldots: float) -> np.ndarray:
+    # matches ROSE thomas form: (1/r) d/dr f, physical 1/r retained
+    _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = alpha
+    mass_pion = 139.57039
+    return vso / mass_pion**2 * ldots * _ws_shape_prime(r, rso, aso) / r
+
+
 
 @dataclass(frozen=True)
 class ChannelFOM:
     """Live ROSE solver state for one exact partial-wave channel."""
 
-    channel: int
+    channel: Any
     interaction: Any
     solver: Any
     base_solver: Any
@@ -1146,6 +1305,12 @@ class NuclearScatteringFOM:
         )
         if config.potential.name in {"ws_1", "ws_3"}:
             values = np.asarray(kd_values[:3], dtype=float)
+        elif config.potential.name == "full_woods-saxon":
+            central_full = full_woods_saxon_central(target_a=config.target[0])
+            values = np.asarray(
+                [central_full[name] for name in config.parameter_names],
+                dtype=float,
+            )
         elif config.potential.name == "woods-saxon":
             values = np.asarray(kd_values, dtype=float)
         else:
@@ -1221,6 +1386,13 @@ class NuclearScatteringFOM:
                 is_complex=True,
             )
             potential_function = rose.koning_delaroche.KD_simple
+        elif config.potential.name == "full_woods-saxon":
+            kwargs.update(
+                coordinate_space_potential=_full_ws_interaction,
+                spin_orbit_term=_full_ws_spin_orbit,
+                is_complex=True,
+            )
+            potential_function = full_woods_saxon
         else:
             kwargs.update(
                 coordinate_space_potential=(
@@ -1245,18 +1417,24 @@ class NuclearScatteringFOM:
             rk_tols=list(rk_tols),
             domain=np.asarray(rho_domain, dtype=float),
         )
-        full_order_models: dict[int, ChannelFOM] = {}
+        full_order_models: dict[Any, ChannelFOM] = {}
         for channel in config.channels:
-            interaction = interactions.interactions[channel][0]
-            solver = base_solver.clone_for_new_interaction(interaction)
-            full_order_models[channel] = ChannelFOM(
-                channel=channel,
-                interaction=interaction,
-                solver=solver,
-                base_solver=base_solver,
-                rho_mesh=rho_mesh,
-                radius_mesh=radius_mesh,
-            )
+            interaction_row = interactions.interactions[channel]
+            for spin_index, interaction in enumerate(interaction_row):
+                key: Any = (
+                    channel
+                    if len(interaction_row) == 1
+                    else (channel, spin_index)
+                )
+                solver = base_solver.clone_for_new_interaction(interaction)
+                full_order_models[key] = ChannelFOM(
+                    channel=key,
+                    interaction=interaction,
+                    solver=solver,
+                    base_solver=base_solver,
+                    rho_mesh=rho_mesh,
+                    radius_mesh=radius_mesh,
+                )
 
         central_wavefunctions = {
             channel: model.solve(parameters=central_vector)
@@ -1285,6 +1463,16 @@ class NuclearScatteringFOM:
         testing_potentials = np.asarray(
             [potential_function(radius_mesh, row) for row in design.testing.values]
         )
+        so_function = config.potential.spin_orbit_function
+        central_spin_orbit = training_spin_orbit = testing_spin_orbit = None
+        if so_function is not None:
+            central_spin_orbit = np.asarray(so_function(radius_mesh, central_vector))
+            training_spin_orbit = np.asarray(
+                [so_function(radius_mesh, row) for row in design.training.values]
+            )
+            testing_spin_orbit = np.asarray(
+                [so_function(radius_mesh, row) for row in design.testing.values]
+            )
         return SamplingState(
             design=design,
             central_parameters=central,
@@ -1297,6 +1485,10 @@ class NuclearScatteringFOM:
             training_potentials=training_potentials,
             testing_potentials=testing_potentials,
             full_order_models=full_order_models,
+            interaction_space=interactions,
+            central_spin_orbit=central_spin_orbit,
+            training_spin_orbit=training_spin_orbit,
+            testing_spin_orbit=testing_spin_orbit,
         )
 
 
@@ -1349,6 +1541,9 @@ def _predictor(*, emulator, kind: str, count: int) -> PredictorState:
             testing_potentials=samples.testing_potentials,
             predictor_count=count,
             minimum_radius=0.2,
+            central_spin_orbit=samples.central_spin_orbit,
+            training_spin_orbit=samples.training_spin_orbit,
+            testing_spin_orbit=samples.testing_spin_orbit,
         )
     raise ValueError("predictor must be 'parameters' or 'potential'")
 
@@ -1451,7 +1646,20 @@ class TrainingEngine:
         basis_size: int,
         predictor: str,
         predictor_count: int,
+        observable: str = "wavefunction",
+        angles_degrees: Sequence[float] | None = None,
     ) -> TrainingState:
+        if observable not in {"wavefunction", "cross_section"}:
+            raise ValueError("observable must be 'wavefunction' or 'cross_section'")
+        angle_array = None
+        if angles_degrees is not None:
+            angle_array = np.asarray(angles_degrees, dtype=float)
+            if angle_array.ndim != 1 or angle_array.size == 0:
+                raise ValueError("angles_degrees must be a non-empty one-dimensional array")
+            if not np.all(np.isfinite(angle_array)):
+                raise ValueError("angles_degrees must contain finite values")
+        if observable == "cross_section" and angle_array is None:
+            raise ValueError("cross_section observable requires angles_degrees")
         basis_only = self.reduced_basis(emulator=emulator, basis_size=basis_size)
         predictor_state = _predictor(
             emulator=emulator, kind=predictor, count=predictor_count
@@ -1494,8 +1702,135 @@ class TrainingEngine:
                 "basis_size": basis_size,
                 "predictor": predictor,
                 "predictor_count": predictor_count,
+                "observable": observable,
+                "angles_degrees": angle_array,
             },
         )
+
+
+def _interaction_channel_key(interaction_row: Sequence, ell: int, spin_index: int):
+    return ell if len(interaction_row) == 1 else (ell, spin_index)
+
+
+def _s_matrix_from_coefficients(rbe, coeff: np.ndarray):
+    x = np.hstack((1, np.asarray(coeff, dtype=np.complex128)))
+    phi = np.dot(x, rbe.asymptotic_vals)
+    phi_prime = np.dot(x, rbe.asymptotic_ders)
+    r_matrix = 1 / rbe.s_0 * phi / phi_prime
+    return (rbe.Hm - rbe.s_0 * r_matrix * rbe.Hmp) / (
+        rbe.Hp - rbe.s_0 * r_matrix * rbe.Hpp
+    )
+
+
+def _scattering_amplitude_emulator(*, emulator):
+    """Build (and cache) the ROSE cross-section assembler for a trained model.
+
+    ROSE machinery here is LROM plumbing, not benchmarking: it converts the
+    learned reduced coordinates into S-matrix elements and assembles the
+    differential cross section. The bases handed to ROSE are the package's
+    own phi0 and vectors.
+    """
+    cached = getattr(emulator, "_sae_cache", None)
+    if cached is not None:
+        return cached
+    rose = _import_rose()
+    samples = emulator.samples
+    if samples is None or samples.interaction_space is None:
+        raise LROMStateError("cross-section prediction requires sampled state")
+    options = emulator.training_options or {}
+    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
+    partial_waves = tuple(emulator.partial_waves)
+    if partial_waves != tuple(range(max(partial_waves) + 1)):
+        raise ValueError(
+            "cross-section prediction requires contiguous partial waves starting at l=0"
+        )
+    bases = []
+    for ell in partial_waves:
+        interaction_row = samples.interaction_space.interactions[ell]
+        row_bases = []
+        for spin_index in range(len(interaction_row)):
+            key = _interaction_channel_key(interaction_row, ell, spin_index)
+            model = samples.full_order_models[key]
+            basis_state = emulator.basis[key]
+            custom_basis = rose.basis.CustomBasis(
+                solutions=np.asarray(
+                    samples.training_wavefunctions[key], dtype=np.complex128
+                ).T.copy(),
+                phi_0=np.asarray(
+                    samples.central_wavefunctions[key], dtype=np.complex128
+                ).copy(),
+                rho_mesh=samples.mesh.rho,
+                n_basis=basis_state.basis_size,
+                solver=model.solver,
+                subtract_phi0=True,
+                use_svd=True,
+                center=False,
+                scale=False,
+            )
+            custom_basis.vectors = np.asarray(basis_state.vectors, dtype=np.complex128)
+            custom_basis.phi_0 = np.asarray(basis_state.phi0, dtype=np.complex128)
+            row_bases.append(custom_basis)
+        bases.append(row_bases)
+    sae = rose.ScatteringAmplitudeEmulator(
+        samples.interaction_space,
+        bases,
+        l_max=max(partial_waves),
+        angles=np.deg2rad(angles_degrees),
+        s_0=samples.full_order_models[partial_waves[0]].base_solver.s_0,
+        Smatrix_abs_tol=1e-8,
+        initialize_emulator=True,
+    )
+    emulator._sae_cache = sae
+    return sae
+
+
+def _cross_section_prediction(
+    *,
+    emulator,
+    values: np.ndarray,
+    coefficients: Mapping[Any, np.ndarray],
+) -> tuple[SmatrixState, CrossSectionState]:
+    samples = emulator.samples
+    options = emulator.training_options or {}
+    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
+    angles = np.deg2rad(angles_degrees)
+    partial_waves = tuple(emulator.partial_waves)
+    sae = _scattering_amplitude_emulator(emulator=emulator)
+    splus_rows = []
+    sminus_rows = []
+    cross_sections = []
+    for case_index, row in enumerate(values):
+        splus = np.zeros(len(partial_waves), dtype=np.complex128)
+        sminus = np.zeros(len(partial_waves), dtype=np.complex128)
+        for offset, channel in enumerate(partial_waves):
+            interaction_row = samples.interaction_space.interactions[channel]
+            plus_key = _interaction_channel_key(interaction_row, channel, 0)
+            splus[offset] = _s_matrix_from_coefficients(
+                sae.rbes[channel][0],
+                coefficients[plus_key][case_index],
+            )
+            if len(interaction_row) == 1:
+                sminus[offset] = splus[offset]
+            else:
+                minus_key = _interaction_channel_key(interaction_row, channel, 1)
+                sminus[offset] = _s_matrix_from_coefficients(
+                    sae.rbes[channel][1],
+                    coefficients[minus_key][case_index],
+                )
+        splus_rows.append(splus)
+        sminus_rows.append(sminus)
+        cross_sections.append(sae.calculate_xs(splus, sminus, row, angles=angles).dsdo)
+    return (
+        SmatrixState(
+            partial_waves=partial_waves,
+            splus=np.asarray(splus_rows),
+            sminus=np.asarray(sminus_rows),
+        ),
+        CrossSectionState(
+            angles_degrees=angles_degrees,
+            values=np.asarray(cross_sections, dtype=float),
+        ),
+    )
 
 
 def _parameter_rows(*, emulator, parameters) -> np.ndarray:
@@ -1525,6 +1860,7 @@ def predict(*, emulator, parameters) -> PredictionState:
         predictor=predictor,
         values=values,
         potential_function=emulator.config.potential.function,
+        spin_orbit_function=emulator.config.potential.spin_orbit_function,
     )
     coefficients = {
         channel: solve_rf_lrom(model=model, predictors=features)
@@ -1536,11 +1872,22 @@ def predict(*, emulator, parameters) -> PredictionState:
         )
         for channel, coordinates in coefficients.items()
     }
+    smatrix = None
+    cross_sections = None
+    options = emulator.training_options or {}
+    if options.get("observable") == "cross_section":
+        smatrix, cross_sections = _cross_section_prediction(
+            emulator=emulator,
+            values=values,
+            coefficients=coefficients,
+        )
     return PredictionState(
         parameter_names=emulator.parameter_names,
         parameters=values,
         coefficients=coefficients,
         wavefunctions=wavefunctions,
+        smatrix=smatrix,
+        cross_sections=cross_sections,
     )
 
 
@@ -1795,6 +2142,7 @@ class LROM:
         self._portable_mesh: MeshState | None = None
         self._training_state: TrainingState | None = None
         self._prediction_state: Any = None
+        self._sae_cache: Any = None
         self._fom_provider: Any = None
         self._training_engine: Any = None
         self._inference_only = False
@@ -1914,6 +2262,7 @@ class LROM:
         return self._training_engine
 
     def _clear_training_state(self) -> None:
+        self._sae_cache = None
         self._training_state = None
         self._clear_prediction_state()
 
@@ -2019,16 +2368,21 @@ class LROM:
         basis_size: int = 4,
         predictor: str = "potential",
         predictor_count: int = 6,
+        observable: str = "wavefunction",
+        angles_degrees: Sequence[float] | None = None,
     ) -> None:
         if self._inference_only:
             raise LROMStateError("a portable inference artifact cannot be retrained")
         if not self.is_sampled:
             raise LROMStateError("call sampling() before train()")
+        self._sae_cache = None
         self._training_state = self._trainer().train(
             emulator=self,
             basis_size=basis_size,
             predictor=predictor,
             predictor_count=predictor_count,
+            observable=observable,
+            angles_degrees=angles_degrees,
         )
         self._clear_prediction_state()
 
@@ -2071,7 +2425,7 @@ class LROM:
 # public surface
 # ==========================================================================
 
-__version__ = "1.2.0"
+__version__ = "2.0.0"
 
 
 def load(*, path: str | Path) -> LROM:

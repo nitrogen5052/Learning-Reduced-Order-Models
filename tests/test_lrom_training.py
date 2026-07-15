@@ -137,3 +137,132 @@ def test_real_ws3_training_uses_potential_predictors() -> None:
     assert emulator.testing_errors[0]["lrom"].shape == (4, 96)
 
 
+
+
+def test_predict_produces_cross_sections_when_trained_for_observable() -> None:
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=0,
+        potential="ws_1",
+    )
+    emulator.sampling(
+        training_ranges={"Vv": (47.0, 53.0)},
+        testing_ranges={"Vv": (45.0, 55.0)},
+        training_size=5,
+        testing_size=3,
+        mesh_size=96,
+        strategy="linspace",
+        seed=9,
+        eim_basis_size=2,
+    )
+    angles = np.linspace(5.0, 175.0, 9)
+    emulator.train(
+        basis_size=2,
+        predictor="parameters",
+        observable="cross_section",
+        angles_degrees=angles,
+    )
+
+    emulator.predict(parameters=[{"Vv": 49.0}, {"Vv": 51.0}])
+
+    assert emulator.predictions.smatrix.partial_waves == (0,)
+    assert emulator.predictions.smatrix.splus.shape == (2, 1)
+    assert emulator.predictions.cross_sections.angles_degrees.tolist() == angles.tolist()
+    assert emulator.predictions.cross_sections.values.shape == (2, 9)
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+    assert np.all(emulator.predictions.cross_sections.values > 0.0)
+
+
+def test_full_woods_saxon_predict_uses_spin_orbit_smatrix_channels() -> None:
+    from lrom import full_woods_saxon_central
+
+    central = full_woods_saxon_central(target_a=40)
+    ranges = {
+        name: tuple(sorted((0.98 * value, 1.02 * value)))
+        for name, value in central.items()
+    }
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=(0, 1),
+        potential="full_woods-saxon",
+    )
+    emulator.sampling(
+        training_ranges=ranges,
+        testing_ranges=ranges,
+        training_size=6,
+        testing_size=3,
+        mesh_size=80,
+        strategy="latin_hypercube",
+        seed=13,
+        eim_basis_size=2,
+    )
+    angles = np.linspace(10.0, 170.0, 7)
+    emulator.train(
+        basis_size=2,
+        predictor="potential",
+        predictor_count=4,
+        observable="cross_section",
+        angles_degrees=angles,
+    )
+
+    keys = set(emulator.samples.full_order_models)
+    assert keys == {0, (1, 0), (1, 1)}
+
+    emulator.predict(parameters=[{"Vso": 1.05 * central["Vso"]}])
+    assert emulator.predictions.smatrix.splus.shape == (1, 2)
+    assert emulator.predictions.smatrix.sminus.shape == (1, 2)
+    assert emulator.predictions.cross_sections.values.shape == (1, 7)
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+
+
+def test_potential_predictors_respond_to_spin_orbit_parameters() -> None:
+    from lrom import (
+        features_for_values,
+        full_woods_saxon,
+        full_woods_saxon_central,
+        full_woods_saxon_spin_orbit,
+    )
+
+    central = full_woods_saxon_central(target_a=40)
+    ranges = {
+        name: tuple(sorted((0.98 * value, 1.02 * value)))
+        for name, value in central.items()
+    }
+    emulator = LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=(0, 1),
+        potential="full_woods-saxon",
+    )
+    emulator.sampling(
+        training_ranges=ranges,
+        testing_ranges=ranges,
+        training_size=8,
+        testing_size=3,
+        mesh_size=80,
+        strategy="latin_hypercube",
+        seed=13,
+        eim_basis_size=3,
+    )
+    emulator.train(basis_size=2, predictor="potential", predictor_count=6)
+
+    predictor = emulator.predictors
+    assert np.any(np.asarray(predictor.selected_components) == 1)
+
+    base = [central[name] for name in emulator.parameter_names]
+    bumped = [
+        central[name] * (1.10 if name == "Vso" else 1.0)
+        for name in emulator.parameter_names
+    ]
+    features = features_for_values(
+        predictor=predictor,
+        values=np.asarray([base, bumped]),
+        potential_function=full_woods_saxon,
+        spin_orbit_function=full_woods_saxon_spin_orbit,
+    )
+    assert np.linalg.norm(features[1] - features[0]) > 0.1
