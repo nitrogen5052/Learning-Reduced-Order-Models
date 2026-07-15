@@ -4,8 +4,9 @@
 
 | Version | Milestone | Where |
 |---------|-----------|-------|
-| **1.x** | Wavefunction emulation (current: 1.1.0, single-file package) | `lrom/` |
-| **2.0** | Cross sections — parked, needs fixes | `lrom_legacy/v2_0/` |
+| **2.0** | Cross sections + wavefunctions (current, single-file package) | `lrom/` |
+| **1.2** | Validated wavefunction-only snapshot | `lrom_legacy/v1_2/` |
+| **2.0 (first attempt)** | Parked parts donor | `lrom_legacy/v2_0/` |
 | **3.0** | Global Koning-Delaroche emulator (future) | — |
 
 Minor digits are fixes/restructures within a milestone (1.1.0 = 1.0 physics
@@ -18,22 +19,22 @@ module names like `v2_0` (`lrom_legacy.v2_0`).
 ## Benchmark naming (law since 2026-07-13)
 
 **Benchmark notebooks are named after the legacy notebook they recreate**:
-`benchmark_02.ipynb` recreates
+`benchmark_notebooks/1.0/benchmark_02.ipynb` recreates
 `scientific_archive/legacy_code/Legacy_benchmark/notebooks/02_lrom_method_walkthrough.ipynb`.
-A future cross-section benchmark would be `benchmark_03.ipynb` (legacy 03),
-and so on. This replaces the earlier `Benchmark_<version>` naming.
+`benchmark_notebooks/2.0/benchmark_03.ipynb` recreates legacy 03 (cross-section
+CAT). Benchmarks live under `notebooks/benchmark_notebooks/<version>/`;
+`benchmark_notebooks/2.0/benchmark_01.ipynb` additionally proves 2.0
+reproduces notebook 01 and matches the `v1_2` snapshot bit-for-bit.
 
 ## Milestone flow
 
 The project goal (see `.agents/backlog/paper-results-roadmap.md`, distilled
 from the Paper Results Map) is a series of paper notebooks. Each package
 milestone is validated against the corresponding archived legacy notebook
-before its paper notebook is finalized. Version 1 physics is currently being
-re-verified against `benchmark_02` — that is why 2.0 is parked.
-
-Known 2.0 fixes before it resumes (recorded in `lrom_legacy/__init__.py`):
-potential predictors carry no spin-orbit parameter information, and the CAT
-per-sample timing methodology is too noisy.
+before its paper notebook is finalized. Version 2.0 fixed the first attempt's flaws: spin-orbit-AWARE potential
+predictors (maxvol over stacked central + spin-orbit profiles with per-block
+variance normalization) and min-of-repeats CAT timing with a cached
+S-matrix assembler.
 
 ## Deliberate design decisions (do not "fix")
 
