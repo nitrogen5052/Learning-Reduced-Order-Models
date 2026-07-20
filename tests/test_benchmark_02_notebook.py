@@ -53,6 +53,24 @@ def test_benchmark_02_notebook_contract() -> None:
         assert f"# FIGURE: {figure}" in text
 
 
+def test_rose_benchmark_follows_the_heldout_tutorial_workflow() -> None:
+    text = notebook_text()
+    assert "from scipy.stats import qmc" in text
+    assert "ROSE_EIM_CANDIDATES = (4, 8, 12)" in text
+    assert "ROSE_VALIDATION_SIZE = 20" in text
+    assert "ROSE_TIMING_REPEATS = 3" in text
+    assert text.count("qmc.LatinHypercube") == 3
+    assert text.count("for n_u in ROSE_EIM_CANDIDATES:") == 3
+    assert text.count(".exact_wave_functions(") == 3
+    assert text.count(".emulate_wave_functions(") >= 6
+    assert text.count("time.perf_counter()") >= 6
+    assert text.count("n_basis=BASIS_SIZE") >= 3
+    assert text.count("selected ROSE configuration") == 3
+    assert "def build_rose" not in text
+    assert "def validate_rose" not in text
+    assert "CATPerformance" not in text
+
+
 def test_benchmark_02_code_cells_compile() -> None:
     notebook = nbformat.read(NOTEBOOK, as_version=4)
     for index, cell in enumerate(notebook.cells):
