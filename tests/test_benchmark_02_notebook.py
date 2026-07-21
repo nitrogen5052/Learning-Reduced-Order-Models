@@ -41,6 +41,8 @@ def test_benchmark_02_notebook_contract() -> None:
     assert "import rose" in text
     assert "import lrom" in text
     assert "import lrom_legacy" not in text
+    assert "eim_basis_size" not in text
+    assert 'high_fidelity_solver="runge_kutta"' in text
     assert "import lrom_bench" not in text
     assert "lrom_demo" not in text
     assert "def plot_" not in text
