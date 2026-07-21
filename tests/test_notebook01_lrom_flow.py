@@ -56,7 +56,7 @@ def test_notebook01_uses_approved_sample_and_model_sizes() -> None:
     assert "training_size=70" in text
     assert "testing_size=81" in text
     assert "BASIS_SIZE = 4" in text
-    assert text.count("basis_size=BASIS_SIZE") == 2
+    assert text.count("basis_size=BASIS_SIZE") == 3
     assert text.count("n_basis=BASIS_SIZE") == 2
     assert "predictor_count=6" in text
     assert text.count("mesh_size=800") == 2
@@ -116,11 +116,24 @@ def test_vv_fixed_geometry_has_koning_delaroche_provenance() -> None:
 def test_ws3_coefficients_are_separate_and_wavefunctions_keep_absolute_differences() -> None:
     text = source()
 
-    assert "np.abs(ws3_ls_coefficients - ws3_lrom_coefficients)" in text
+    assert "ws3_coordinate_difference = np.abs(" in text
+    assert "ws3_ls_coefficients - ws3_lrom_coefficients" in text
     assert "np.abs(ws3_ls_coefficients - ws3_rose_coefficients)" not in text
     assert "np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index])" in text
     assert "np.abs(case.high_fidelity[0] - case.lrom[0])" in text
     assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text
+
+
+def test_ws3_restores_raw_parameter_and_colored_coefficient_diagnostics() -> None:
+    text = source()
+
+    assert "av variation" in text
+    assert "raw parameter predictors" in text
+    assert "potential predictors" in text
+    assert "colored by" in text
+    assert "parameter_lrom" in text
+    assert "parameter_relative_l2" in text
+    assert "case_number" not in text
 
 
 def test_notebook01_rose_uses_free_reference_without_lrom_basis_overwrites() -> None:

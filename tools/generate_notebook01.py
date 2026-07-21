@@ -510,7 +510,11 @@ def notebook_cells() -> list:
             selected from the training ensemble by SVD and maxvol-style selection.
 
             The transformed equation has the form
-            $(I + p_1M_1 + \\cdots + p_KM_K)a = \\sum_k p_kb_k$.
+            $(I + \\sum_{j=1}^{K}p_j(\\alpha)M_j)a(\\alpha)
+            = \\sum_{j=1}^{K}p_j(\\alpha)b_j$, where $\\alpha=(V_v,R_v,a_v)$
+            is the physical parameter vector. We first fit raw parameter predictors
+            as a diagnostic, then refit the same snapshots with potential predictors.
+            This tests the predictor choice without rerunning the FOM.
             The constant source $b_0$ is identically zero here because the
             predictors and the reduced coordinates are both centered on the
             reference solution: $p = 0$ must give $a = 0$.
@@ -537,6 +541,7 @@ def notebook_cells() -> list:
                 "av": (0.80 * ws3_center["av"], 1.20 * ws3_center["av"]),
             }
 
+            # Public call: sample the three-parameter physical region once.
             ws3_emulator.sampling(
                 training_ranges=ws3_training_ranges,
                 testing_ranges=ws3_testing_ranges,
@@ -547,6 +552,23 @@ def notebook_cells() -> list:
                 seed=1204,
                 high_fidelity_solver="runge_kutta",
             )
+            # Diagnostic fit: preserve raw parameter predictors before retraining.
+            ws3_emulator.train(
+                basis_size=BASIS_SIZE,
+                predictor="parameters",
+                predictor_count=3,
+            )
+            parameter_lrom = np.asarray(
+                ws3_emulator.testing_results.lrom[0]
+            ).copy()
+            parameter_relative_l2 = np.asarray(
+                ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
+            ).copy()
+            parameter_training_relative_l2 = np.asarray(
+                ws3_emulator.training_results.metrics["relative_l2"][0]["lrom"]
+            ).copy()
+
+            # Main fit: reuse the same FOM snapshots with potential predictors.
             ws3_emulator.train(
                 basis_size=BASIS_SIZE,
                 predictor="potential",
@@ -642,6 +664,69 @@ def notebook_cells() -> list:
             print("potential predictor radii [fm]:", ws3_emulator.predictors.selected_radii)
             """
         ),
+        md(
+            """
+            The three pairwise panels show that $V_v$, $R_v$, and $a_v$ vary
+            together. In particular, the av variation is visible both as an axis
+            and as a color scale rather than being left implicit in the sample table.
+
+            The error summary then compares raw parameter predictors with the main
+            potential predictors on the same stored high-fidelity samples.
+            """
+        ),
+        code(
+            """
+            ws3_names = ws3_emulator.parameter_names
+            ws3_training_rows = ws3_emulator.samples.design.training.values
+            fig, axes = plt.subplots(1, 3, figsize=(13.2, 3.6))
+            pairings = ((0, 1, 2), (0, 2, 1), (1, 2, 0))
+            for ax, (x_index, y_index, color_index) in zip(axes, pairings):
+                scatter = ax.scatter(
+                    ws3_training_rows[:, x_index],
+                    ws3_training_rows[:, y_index],
+                    c=ws3_training_rows[:, color_index],
+                    cmap="viridis",
+                    s=26,
+                    alpha=0.8,
+                )
+                ax.set(
+                    xlabel=f"{ws3_names[x_index]}",
+                    ylabel=f"{ws3_names[y_index]}",
+                    title=f"colored by {ws3_names[color_index]}",
+                )
+                fig.colorbar(
+                    scatter,
+                    ax=ax,
+                    label=f"{ws3_names[color_index]}",
+                )
+            fig.suptitle("Joint Vv, Rv, and av variation in the training design")
+            fig.tight_layout()
+            plt.show()
+
+            potential_relative_l2 = np.asarray(
+                ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
+            )
+            pd.DataFrame([
+                {
+                    "predictors": "raw parameters",
+                    "testing median relative L2": float(np.median(parameter_relative_l2)),
+                    "testing maximum relative L2": float(np.max(parameter_relative_l2)),
+                },
+                {
+                    "predictors": "potential values",
+                    "testing median relative L2": float(np.median(potential_relative_l2)),
+                    "testing maximum relative L2": float(np.max(potential_relative_l2)),
+                },
+            ]).set_index("predictors")
+            """
+        ),
+        md(
+            """
+            The potential ensemble is compressed separately from the wavefunctions.
+            Red markers identify the six physical radii selected for the potential
+            predictors, and the adjacent spectrum shows the ensemble decay.
+            """
+        ),
         code(
             """
             r3 = ws3_emulator.mesh.radius
@@ -667,6 +752,14 @@ def notebook_cells() -> list:
                 axes[1].semilogy(index, singular_value, "o", color="slateblue")
             axes[1].set(xlabel="potential mode", ylabel="singular value", title="Potential-ensemble spectrum")
             plt.show()
+            """
+        ),
+        md(
+            """
+            The LROM and ROSE wavefunction bases again appear beside their
+            singular-value spectra. The following coefficient panels replace an
+            arbitrary case index with physical parameters: the horizontal axis is
+            $V_v$, while a second parameter supplies the color scale.
             """
         ),
         code(
@@ -762,53 +855,83 @@ def notebook_cells() -> list:
                 "ls": {0: ws3_ls_coefficients},
                 "lrom": dict(ws3_emulator.testing_results.coefficients["lrom"]),
             }
-            case_number = np.arange(ws3_emulator.samples.design.testing.values.shape[0])
-            fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.0), sharex=True)
-            for method, color in (("ls", "blue"), ("lrom", "orange")):
-                axes[0].scatter(
-                    case_number,
-                    np.real(coefficients[method][0][:, 0]),
-                    s=18,
-                    color=color,
-                    alpha=0.8,
-                    label=method.upper(),
-                )
-            ws3_ls_coefficients = np.real(coefficients["ls"][0][:, 0])
-            ws3_lrom_coefficients = np.real(coefficients["lrom"][0][:, 0])
-            axes[1].scatter(
-                case_number,
-                np.maximum(
-                    np.abs(ws3_ls_coefficients - ws3_lrom_coefficients),
-                    DISPLAY_ERROR_FLOOR,
-                ),
-                s=18,
-                color="orange",
-                alpha=0.8,
-                label="|LS - LROM|",
-            )
-            axes[0].set(ylabel="Re(first coordinate)", title="ws_3 LROM-coordinate diagnostics")
-            axes[1].set_yscale("log")
-            axes[1].set(xlabel="testing case", ylabel="absolute coefficient difference")
-            axes[0].legend()
-            axes[1].legend()
+            ws3_lrom_coefficients = coefficients["lrom"][0]
+            fig, axes = plt.subplots(2, 2, figsize=(11.2, 7.0), sharex=True)
+            for row_index, (method, method_color) in enumerate(
+                (("ls", "blue"), ("lrom", "orange"))
+            ):
+                for coefficient_index, ax in enumerate(axes[row_index]):
+                    scatter = ax.scatter(
+                        ws3_test_rows[:, 0],
+                        np.real(coefficients[method][0][:, coefficient_index]),
+                        c=ws3_test_rows[:, 1],
+                        cmap="viridis",
+                        s=24,
+                        alpha=0.8,
+                    )
+                    for spine in ax.spines.values():
+                        spine.set_color(method_color)
+                        spine.set_linewidth(1.8)
+                    ax.set(
+                        ylabel=f"Re(a{coefficient_index + 1})",
+                        title=(
+                            f"{method.upper()} coordinate {coefficient_index + 1}: "
+                            "Vv, colored by Rv"
+                        ),
+                    )
+                    fig.colorbar(scatter, ax=ax, label="Rv [fm]")
+            for ax in axes[-1]:
+                ax.set_xlabel("Vv [MeV]")
+            fig.suptitle("ws_3 central-basis coordinates versus physical parameters")
             fig.tight_layout()
             plt.show()
 
-            fig, ax = plt.subplots(figsize=(7.2, 3.8))
-            ax.scatter(
-                case_number,
-                np.real(ws3_rose_coefficients[:, 0]),
-                s=18,
-                color="red",
-                alpha=0.8,
-                label="ROSE",
+            ws3_coordinate_difference = np.abs(
+                ws3_ls_coefficients - ws3_lrom_coefficients
             )
-            ax.set(
-                xlabel="testing case",
-                ylabel="Re(first ROSE coordinate)",
-                title="ws_3 ROSE-native coordinates",
-            )
-            ax.legend()
+            fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.8), sharex=True)
+            for coefficient_index, ax in enumerate(axes):
+                scatter = ax.scatter(
+                    ws3_test_rows[:, 0],
+                    np.maximum(
+                        ws3_coordinate_difference[:, coefficient_index],
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    c=ws3_test_rows[:, 2],
+                    cmap="plasma",
+                    s=24,
+                    alpha=0.8,
+                )
+                ax.set_yscale("log")
+                ax.set(
+                    xlabel="Vv [MeV]",
+                    ylabel="absolute coefficient difference",
+                    title=f"|LS - LROM| for a{coefficient_index + 1}, colored by av",
+                )
+                fig.colorbar(scatter, ax=ax, label="av [fm]")
+            fig.tight_layout()
+            plt.show()
+
+            fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.8), sharex=True)
+            for coefficient_index, ax in enumerate(axes):
+                scatter = ax.scatter(
+                    ws3_test_rows[:, 0],
+                    np.real(ws3_rose_coefficients[:, coefficient_index]),
+                    c=ws3_test_rows[:, 2],
+                    cmap="plasma",
+                    s=24,
+                    alpha=0.8,
+                )
+                for spine in ax.spines.values():
+                    spine.set_color("red")
+                    spine.set_linewidth(1.8)
+                ax.set(
+                    xlabel="Vv [MeV]",
+                    ylabel=f"Re(c{coefficient_index + 1})",
+                    title=f"ROSE coordinate {coefficient_index + 1}, colored by av",
+                )
+                fig.colorbar(scatter, ax=ax, label="av [fm]")
+            fig.suptitle("ws_3 ROSE-native coordinates")
             fig.tight_layout()
             plt.show()
             """
