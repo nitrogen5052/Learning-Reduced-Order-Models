@@ -132,7 +132,10 @@ def notebook_cells() -> list:
             ## Section 1. Parameter Varying Vv
 
             The first object isolates the effect of the real Woods-Saxon depth.
-            Its testing interval is wider than its training interval.
+            Its testing interval is wider than its training interval. The fixed
+            $R_v$ and $a_v$ values come from the Koning-Delaroche global
+            systematics for this target/projectile system at 14.1 MeV laboratory
+            energy; only $V_v$ varies in this teaching case.
             """
         ),
         code(
@@ -150,6 +153,7 @@ def notebook_cells() -> list:
             vv_training_ranges = {"Vv": (0.90 * Vv0, 1.10 * Vv0)}
             vv_testing_ranges = {"Vv": (0.65 * Vv0, 1.35 * Vv0)}
 
+            # Public call: generate exact Runge-Kutta snapshots for the Vv design.
             vv_emulator.sampling(
                 training_ranges=vv_training_ranges,
                 testing_ranges=vv_testing_ranges,
@@ -160,6 +164,7 @@ def notebook_cells() -> list:
                 seed=1204,
                 high_fidelity_solver="runge_kutta",
             )
+            # Public call: train RF-LROM with one normalized Vv predictor.
             vv_emulator.train(
                 basis_size=BASIS_SIZE,
                 predictor="parameters",
@@ -179,6 +184,9 @@ def notebook_cells() -> list:
             )
 
             print("central parameters:", dict(vv_emulator.central_parameters))
+            print("Vv varies over the requested ranges")
+            print("fixed Rv [fm]:", vv_center["Rv"])
+            print("fixed av [fm]:", vv_center["av"])
             print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
             print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
 
@@ -237,6 +245,13 @@ def notebook_cells() -> list:
             vv_rose_wavefunctions = np.asarray([vv_rose_rbe.emulate_wave_function(row) for row in vv_test_rows])
             """
         ),
+        md(
+            """
+            The potential rainbow shows the isolated change in depth, while the
+            wavefunction rainbow shows the corresponding high-fidelity response.
+            Both panels use the same training cases and physical radius mesh.
+            """
+        ),
         code(
             """
             r = vv_emulator.mesh.radius
@@ -261,6 +276,13 @@ def notebook_cells() -> list:
                 label="Vv [MeV]",
             )
             plt.show()
+            """
+        ),
+        md(
+            """
+            The next figures show each method's basis beside its singular-value
+            decay, followed by coefficient trends. The spectra show whether four
+            retained vectors are consistent with the snapshot compression.
             """
         ),
         code(
@@ -423,12 +445,20 @@ def notebook_cells() -> list:
             plt.show()
             """
         ),
+        md(
+            """
+            A noncentral test case avoids the exact central-reference overlap and
+            gives a visible wavefunction comparison for all three methods.
+            """
+        ),
         code(
             """
-            vv_representative_index = len(vv_test) // 2
+            candidate_indices = np.flatnonzero(vv_plot_mask)
+            vv_representative_index = candidate_indices[len(candidate_indices) // 2]
             vv_representative_id = vv_emulator.samples.design.testing.case_ids[vv_representative_index]
             vv_case = vv_emulator.testing_case(case_id=vv_representative_id)
-            print("selected Vv testing case:", vv_representative_id, dict(vv_case.parameters))
+            print("selected noncentral Vv testing case:", vv_representative_id, dict(vv_case.parameters))
+            print("distance from central Vv [MeV]:", abs(vv_case.parameters["Vv"] - Vv0))
 
             fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
             axes[0].plot(vv_case.radius, np.real(vv_case.high_fidelity[0]), color="black", label="true test solution")
@@ -436,7 +466,7 @@ def notebook_cells() -> list:
             axes[0].plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
             axes[0].plot(vv_case.radius, np.real(vv_rose_wavefunctions[vv_representative_index]), "--", color="red", label="ROSE")
             axes[0].set_ylabel("Re(phi)")
-            axes[0].set_title(f"40Ca(n,n), l=0 central Vv testing solution: {vv_representative_id}")
+            axes[0].set_title(f"40Ca(n,n), l=0 noncentral Vv testing solution: {vv_representative_id}")
             axes[0].legend()
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), DISPLAY_ERROR_FLOOR), color="orange", label="LROM")
@@ -447,6 +477,12 @@ def notebook_cells() -> list:
             axes[1].legend()
             fig.tight_layout()
             plt.show()
+            """
+        ),
+        md(
+            """
+            Finally, the pointwise error family shows how each approximation
+            behaves across every noncentral Vv testing case.
             """
         ),
         code(

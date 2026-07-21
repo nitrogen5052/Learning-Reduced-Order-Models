@@ -91,7 +91,9 @@ def test_vv_coefficients_use_separate_lrom_and_rose_coordinate_figures() -> None
 def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
     text = source()
 
-    assert "vv_representative_index = len(vv_test) // 2" in text
+    assert "candidate_indices = np.flatnonzero(vv_plot_mask)" in text
+    assert "vv_representative_index = candidate_indices[len(candidate_indices) // 2]" in text
+    assert "noncentral" in text
     assert "vv_emulator.testing_case(case_id=vv_representative_id)" in text
     for method in ("high_fidelity", "lrom"):
         assert f"vv_case.{method}[0]" in text
@@ -100,6 +102,15 @@ def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
     assert "np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index])" in text
     assert "np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0])" in text
     assert "np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index])" in text
+
+
+def test_vv_fixed_geometry_has_koning_delaroche_provenance() -> None:
+    text = source()
+
+    assert "Koning-Daelroche" not in text
+    assert "Koning-Delaroche" in text
+    assert "fixed Rv" in text
+    assert "fixed av" in text
 
 
 def test_ws3_coefficients_are_separate_and_wavefunctions_keep_absolute_differences() -> None:
