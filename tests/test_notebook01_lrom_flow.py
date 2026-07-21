@@ -59,7 +59,19 @@ def test_notebook01_uses_approved_sample_and_model_sizes() -> None:
     assert text.count("basis_size=BASIS_SIZE") == 2
     assert text.count("n_basis=BASIS_SIZE") == 2
     assert "predictor_count=6" in text
-    assert "eim_basis_size=8" in text
+    assert text.count("mesh_size=800") == 2
+    assert text.count('high_fidelity_solver="runge_kutta"') == 2
+    assert "eim_basis_size" not in text
+
+
+def test_notebook01_calls_the_ls_baseline_explicitly() -> None:
+    text = source()
+
+    assert text.count("lrom.least_squares_baseline(") == 3
+    assert "vv_ls_coefficients" in text
+    assert "vv_ls_wavefunctions" in text
+    assert "ws3_ls_coefficients" in text
+    assert "ws3_ls_wf_test" in text
 
 
 def test_vv_coefficients_use_separate_lrom_and_rose_coordinate_figures() -> None:
@@ -81,11 +93,12 @@ def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
 
     assert "vv_representative_index = len(vv_test) // 2" in text
     assert "vv_emulator.testing_case(case_id=vv_representative_id)" in text
-    for method in ("high_fidelity", "ls", "lrom"):
+    for method in ("high_fidelity", "lrom"):
         assert f"vv_case.{method}[0]" in text
+    assert "vv_ls_wavefunctions[vv_representative_index]" in text
     assert "vv_rose_wavefunctions[vv_representative_index]" in text
-    for method in ("ls", "lrom"):
-        assert f"np.abs(vv_case.high_fidelity[0] - vv_case.{method}[0])" in text
+    assert "np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index])" in text
+    assert "np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0])" in text
     assert "np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index])" in text
 
 
@@ -94,8 +107,8 @@ def test_ws3_coefficients_are_separate_and_wavefunctions_keep_absolute_differenc
 
     assert "np.abs(ws3_ls_coefficients - ws3_lrom_coefficients)" in text
     assert "np.abs(ws3_ls_coefficients - ws3_rose_coefficients)" not in text
-    for method in ("ls", "lrom"):
-        assert f"np.abs(case.high_fidelity[0] - case.{method}[0])" in text
+    assert "np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index])" in text
+    assert "np.abs(case.high_fidelity[0] - case.lrom[0])" in text
     assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text
 
 

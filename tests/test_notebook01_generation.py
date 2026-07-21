@@ -16,7 +16,7 @@ def notebook_source() -> str:
     )
 
 
-def test_notebook01_bootstrap_finds_frozen_v1_2_package() -> None:
+def test_notebook01_bootstrap_finds_public_v1_2_package() -> None:
     script = f"""
 from pathlib import Path
 import os
@@ -27,7 +27,7 @@ sys.path = [p for p in sys.path if p not in {{{str(ROOT)!r}, {str(ROOT / "notebo
 
 {generate_notebook01.repo_bootstrap_source()}
 
-import lrom_legacy.v1_2 as lrom
+import lrom
 
 assert ROOT == Path({str(ROOT)!r})
 assert sys.path[0] == {str(ROOT)!r}
@@ -43,11 +43,12 @@ assert lrom.LROM.__name__ == "LROM"
     assert result.returncode == 0, result.stderr
 
 
-def test_setup_cell_uses_frozen_v1_2_and_clears_stale_modules() -> None:
+def test_setup_cell_uses_public_v1_2_and_clears_stale_modules() -> None:
     setup = generate_notebook01.notebook_cells()[2]["source"]
 
     assert generate_notebook01.repo_bootstrap_source() in setup
-    assert "import lrom_legacy.v1_2 as lrom" in setup
+    assert "import lrom" in setup
+    assert "lrom_legacy.v1_2" not in setup
     assert 'name in ("lrom", "lrom_legacy")' in setup
     assert 'name.startswith(("lrom.", "lrom_legacy."))' in setup
     assert 'print("LROM package:", lrom.__version__)' in setup
