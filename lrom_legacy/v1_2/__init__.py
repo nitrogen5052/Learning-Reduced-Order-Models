@@ -1170,17 +1170,15 @@ class NuclearScatteringFOM:
         design: SamplingDesign,
         mesh_size: int,
         radial_domain: tuple[float, float] | None,
-        eim_basis_size: int,
+        high_fidelity_solver: str,
         solver_options: Mapping[str, object] | None,
     ) -> SamplingState:
         if isinstance(mesh_size, bool) or not isinstance(mesh_size, int) or mesh_size < 16:
             raise LROMSamplingError("mesh_size must be an integer of at least 16")
-        if (
-            isinstance(eim_basis_size, bool)
-            or not isinstance(eim_basis_size, int)
-            or eim_basis_size < 1
-        ):
-            raise LROMSamplingError("eim_basis_size must be positive")
+        if high_fidelity_solver != "runge_kutta":
+            raise LROMSamplingError(
+                "high_fidelity_solver must be 'runge_kutta'"
+            )
         central, kinematics = self.resolve(config=config)
         central_vector = np.asarray(
             [central[name] for name in config.parameter_names], dtype=float
@@ -1201,28 +1199,21 @@ class NuclearScatteringFOM:
         rho_mesh = np.linspace(*rho_domain, mesh_size)
         radius_mesh = rho_mesh / kinematics.k
 
-        all_values = np.vstack(
-            [central_vector, design.training.values, design.testing.values]
-        )
-        bounds = np.column_stack([all_values.min(axis=0), all_values.max(axis=0)])
-        kwargs: dict[str, Any] = {
+        interaction_options: dict[str, Any] = {
             "l_max": max(config.channels),
             "n_theta": len(config.parameter_names),
             "mu": kinematics.mu,
             "energy": kinematics.e_com,
-            "training_info": bounds,
-            "n_basis": eim_basis_size,
-            "rho_mesh": rho_mesh,
         }
         if config.potential.name == "woods-saxon":
-            kwargs.update(
+            interaction_options.update(
                 coordinate_space_potential=rose.koning_delaroche.KD_simple,
                 spin_orbit_term=rose.koning_delaroche.KD_simple_so,
                 is_complex=True,
             )
             potential_function = rose.koning_delaroche.KD_simple
         else:
-            kwargs.update(
+            interaction_options.update(
                 coordinate_space_potential=(
                     _real_ws_interaction
                     if config.potential.name in {"ws_1", "ws_3"}
@@ -1231,7 +1222,7 @@ class NuclearScatteringFOM:
                 is_complex=False,
             )
             potential_function = config.potential.function
-        interactions = rose.InteractionEIMSpace(**kwargs)
+        interactions = rose.InteractionSpace(**interaction_options)
 
         options = dict(solver_options or {})
         s_0 = float(options.pop("s_0", 6.0 * np.pi))
@@ -1933,7 +1924,7 @@ class LROM:
         radial_domain: tuple[float, float] | None = None,
         strategy: str | None = None,
         seed: int | None = None,
-        eim_basis_size: int = 8,
+        high_fidelity_solver: str = "runge_kutta",
         solver_options: Mapping[str, object] | None = None,
     ) -> None:
         if self._inference_only:
@@ -1996,7 +1987,7 @@ class LROM:
             design=design,
             mesh_size=mesh_size,
             radial_domain=radial_domain,
-            eim_basis_size=eim_basis_size,
+            high_fidelity_solver=high_fidelity_solver,
             solver_options=solver_options,
         )
         self._sampling_state = state

@@ -31,7 +31,7 @@ def build_characterization_emulator() -> v1_2.LROM:
         mesh_size=96,
         strategy="linspace",
         seed=1204,
-        eim_basis_size=4,
+        high_fidelity_solver="runge_kutta",
     )
     emulator.train(basis_size=3, predictor="parameters", predictor_count=1)
     emulator.predict(parameters={"Vv": 0.95 * vv})
@@ -65,4 +65,6 @@ def test_public_lifecycle_methods_exist() -> None:
     for name in ("sampling", "train", "predict", "save"):
         assert callable(getattr(v1_2.LROM, name))
     assert callable(v1_2.load)
-    assert "eim_basis_size" in inspect.signature(v1_2.LROM.sampling).parameters
+    parameters = inspect.signature(v1_2.LROM.sampling).parameters
+    assert "eim_basis_size" not in parameters
+    assert parameters["high_fidelity_solver"].default == "runge_kutta"
