@@ -51,6 +51,10 @@ def test_benchmark_02_notebook_contract() -> None:
     assert "rose.ScatteringAmplitudeEmulator.from_train" in text
     assert "ROSE free-basis LS" in text
     assert "LROM central-basis LS" in text
+    assert text.count("lrom.least_squares_baseline(") == 6
+    assert 'coefficients["ls"]' not in text
+    assert 'metrics["ls"]' not in text
+    assert "metrics['ls']" not in text
     for figure in FIGURES:
         assert f"# FIGURE: {figure}" in text
 

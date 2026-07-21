@@ -24,6 +24,7 @@ def test_benchmark_01_version_comparison_contract() -> None:
     assert "import lrom as v1_2" in text
     assert "eim_basis_size" not in text
     assert 'high_fidelity_solver="runge_kutta"' in text
+    assert text.count("v1_2.least_squares_baseline(") == 2
     assert "notebooks/01_rbm_vs_lrom_single_wavefunction.ipynb" in text
     assert 'assert (agreement["max |2.0 - 1.2|"] < 1e-10).all()' in text
     assert "# FIGURE: version-comparison-errors" in text
