@@ -67,25 +67,28 @@ def test_notebook01_uses_approved_sample_and_model_sizes() -> None:
 def test_notebook01_calls_the_ls_baseline_explicitly() -> None:
     text = source()
 
-    assert text.count("lrom.least_squares_baseline(") == 3
+    assert text.count("lrom.least_squares_baseline(") == 4
+    assert "vv_ls_train_coefficients" in text
     assert "vv_ls_coefficients" in text
     assert "vv_ls_wavefunctions" in text
     assert "ws3_ls_coefficients" in text
     assert "ws3_ls_wf_test" in text
 
 
-def test_vv_coefficients_use_separate_lrom_and_rose_coordinate_figures() -> None:
+def test_vv_coordinates_share_one_method_by_coordinate_figure() -> None:
     text = source()
 
-    assert "for coefficient_index in range(2)" in text
-    assert 'for method, color in (("ls", "blue"), ("lrom", "orange"))' in text
-    assert "coefficients[method][0][vv_plot_mask, coefficient_index]" in text
-    assert "vv_rose_coefficients[vv_plot_mask, coefficient_index]" in text
-    assert ".scatter(" in text
+    assert "vv_coordinate_data = {" in text
+    assert 'fig, axes = plt.subplots(3, BASIS_SIZE, figsize=(14.0, 8.0)' in text
+    assert "vv_ls_train_coefficients" in text
+    assert "vv_rose_train_coefficients" in text
+    assert "vv_rose_coefficients" in text
+    assert "for row_index, (method, coordinate_data) in enumerate(" in text
+    assert "for coordinate_index in range(BASIS_SIZE):" in text
     assert "ax.axvspan(vv_test.min(), vv_train_low" in text
     assert "ax.axvspan(vv_train_high, vv_test.max()" in text
-    assert "np.abs(ls_coefficients - lrom_coefficients)" in text
-    assert "|LS - ROSE|" not in text
+    assert "Vv-only ROSE-native coordinates" not in text
+    assert "absolute coefficient difference" not in text
 
 
 def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
@@ -113,12 +116,32 @@ def test_vv_fixed_geometry_has_koning_delaroche_provenance() -> None:
     assert "fixed av" in text
 
 
-def test_ws3_coefficients_are_separate_and_wavefunctions_keep_absolute_differences() -> None:
+def test_ws3_coordinates_share_one_method_by_coordinate_figure() -> None:
     text = source()
 
-    assert "ws3_coordinate_difference = np.abs(" in text
-    assert "ws3_ls_coefficients - ws3_lrom_coefficients" in text
-    assert "np.abs(ws3_ls_coefficients - ws3_rose_coefficients)" not in text
+    assert "ws3_coordinate_data = {" in text
+    assert 'fig, axes = plt.subplots(3, BASIS_SIZE, figsize=(14.0, 8.0)' in text
+    assert "ws3_ls_train_coefficients" in text
+    assert "ws3_rose_train_coefficients" in text
+    assert "ws3_rv_norm = plt.Normalize(" in text
+    assert "c=ws3_test_rows[:, 1]" in text
+    assert 'label="Rv [fm]"' in text
+    assert "ws3_coordinate_difference" not in text
+    assert "ws_3 ROSE-native coordinates" not in text
+
+
+def test_notebook01_uses_fixed_method_colors() -> None:
+    text = source()
+
+    assert '"ls": "blue"' in text
+    assert '"lrom": "#E6AB02"' in text
+    assert '"rose": "red"' in text
+    assert '"orange"' not in text
+
+
+def test_wavefunction_figures_keep_absolute_differences() -> None:
+    text = source()
+
     assert "np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index])" in text
     assert "np.abs(case.high_fidelity[0] - case.lrom[0])" in text
     assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text

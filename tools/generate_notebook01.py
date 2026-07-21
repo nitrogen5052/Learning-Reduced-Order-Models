@@ -78,6 +78,7 @@ def notebook_cells() -> list:
             "",
             "BASIS_SIZE = 4",
             "DISPLAY_ERROR_FLOOR = 1e-11",
+            'METHOD_COLORS = {"ls": "blue", "lrom": "#E6AB02", "rose": "red"}',
             'print("LROM package:", lrom.__version__)',
             "",
             "@njit",
@@ -173,7 +174,12 @@ def notebook_cells() -> list:
 
             # LS is an explicit oracle benchmark: it projects the known testing
             # wavefunctions onto the already-trained LROM basis.
+            vv_fom_train = vv_emulator.samples.training_wavefunctions[0]
             vv_fom_test = vv_emulator.samples.testing_wavefunctions[0]
+            vv_ls_train_coefficients, vv_ls_train_wavefunctions = lrom.least_squares_baseline(
+                basis=vv_emulator.basis[0],
+                wavefunctions=vv_fom_train,
+            )
             vv_ls_coefficients, vv_ls_wavefunctions = lrom.least_squares_baseline(
                 basis=vv_emulator.basis[0],
                 wavefunctions=vv_fom_test,
@@ -242,7 +248,9 @@ def notebook_cells() -> list:
             )
 
             # 4. Evaluate ROSE on the same ordered parameter rows as LS and LROM.
+            vv_train_rows = vv_emulator.samples.design.training.values
             vv_test_rows = vv_emulator.samples.design.testing.values
+            vv_rose_train_coefficients = np.asarray([vv_rose_rbe.coefficients(row) for row in vv_train_rows])
             vv_rose_coefficients = np.asarray([vv_rose_rbe.coefficients(row) for row in vv_test_rows])
             vv_rose_wavefunctions = np.asarray([vv_rose_rbe.emulate_wave_function(row) for row in vv_test_rows])
             """
@@ -317,74 +325,72 @@ def notebook_cells() -> list:
             fig.tight_layout()
             plt.show()
 
-            vv_test = vv_emulator.samples.design.testing.values[:, 0]
+            # Put every method on the same physical Vv axis. Open circles are
+            # training coordinates; colored squares are noncentral test coordinates.
+            vv_train = vv_train_rows[:, 0]
+            vv_test = vv_test_rows[:, 0]
             vv_plot_mask = ~np.isclose(vv_test, Vv0, rtol=0.0, atol=1e-12)
-            coefficients = {
-                "ls": {0: vv_ls_coefficients},
-                "lrom": dict(vv_emulator.testing_results.coefficients["lrom"]),
+            vv_coordinate_data = {
+                "LS": {
+                    "training": vv_ls_train_coefficients,
+                    "testing": vv_ls_coefficients,
+                    "symbol": "a",
+                    "color": METHOD_COLORS["ls"],
+                },
+                "LROM": {
+                    "training": np.asarray(
+                        vv_emulator.training_results.coefficients["lrom"][0]
+                    ),
+                    "testing": np.asarray(
+                        vv_emulator.testing_results.coefficients["lrom"][0]
+                    ),
+                    "symbol": "a",
+                    "color": METHOD_COLORS["lrom"],
+                },
+                "ROSE": {
+                    "training": vv_rose_train_coefficients,
+                    "testing": vv_rose_coefficients,
+                    "symbol": "c",
+                    "color": METHOD_COLORS["rose"],
+                },
             }
             vv_train_low, vv_train_high = vv_training_ranges["Vv"]
-            fig, axes = plt.subplots(2, 2, figsize=(11.0, 6.2), sharex="col")
-            for coefficient_index in range(2):
-                ax = axes[0, coefficient_index]
-                difference_ax = axes[1, coefficient_index]
-                for method, color in (("ls", "blue"), ("lrom", "orange")):
+            fig, axes = plt.subplots(3, BASIS_SIZE, figsize=(14.0, 8.0), sharex="col")
+            for row_index, (method, coordinate_data) in enumerate(
+                vv_coordinate_data.items()
+            ):
+                for coordinate_index in range(BASIS_SIZE):
+                    ax = axes[row_index, coordinate_index]
+                    ax.scatter(
+                        vv_train,
+                        np.real(coordinate_data["training"][:, coordinate_index]),
+                        s=24,
+                        marker="o",
+                        facecolors="none",
+                        edgecolors="black",
+                        alpha=0.65,
+                        label="training" if coordinate_index == 0 else None,
+                    )
                     ax.scatter(
                         vv_test[vv_plot_mask],
-                        np.real(coefficients[method][0][vv_plot_mask, coefficient_index]),
-                        s=22,
-                        color=color,
+                        np.real(
+                            coordinate_data["testing"][vv_plot_mask, coordinate_index]
+                        ),
+                        s=24,
+                        marker="s",
+                        color=coordinate_data["color"],
                         alpha=0.75,
-                        label=method.upper(),
+                        label="testing" if coordinate_index == 0 else None,
                     )
-                ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.16)
-                ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.16)
-                difference_ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.16)
-                difference_ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.16)
-                ls_coefficients = np.real(coefficients["ls"][0][:, coefficient_index])
-                lrom_coefficients = np.real(coefficients["lrom"][0][:, coefficient_index])
-                difference_ax.scatter(
-                    vv_test[vv_plot_mask],
-                    np.maximum(
-                        np.abs(ls_coefficients - lrom_coefficients)[vv_plot_mask],
-                        DISPLAY_ERROR_FLOOR,
-                    ),
-                    s=20,
-                    color="orange",
-                    alpha=0.75,
-                    label="|LS - LROM|",
-                )
-                ax.set_ylabel(f"Re(a{coefficient_index + 1})")
-                ax.set_title(f"Basis coefficient {coefficient_index + 1}")
-                difference_ax.set_yscale("log")
-                difference_ax.set_xlabel("Vv [MeV]")
-                difference_ax.set_ylabel("absolute coefficient difference")
-            axes[0, 0].legend()
-            axes[1, 0].legend()
-            fig.suptitle("Vv-only LROM-coordinate diagnostics")
-            fig.tight_layout()
-            plt.show()
-
-            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8), sharex=True)
-            for coefficient_index, ax in enumerate(axes):
-                ax.scatter(
-                    vv_test[vv_plot_mask],
-                    np.real(vv_rose_coefficients[vv_plot_mask, coefficient_index]),
-                    s=22,
-                    color="red",
-                    alpha=0.75,
-                    label="ROSE",
-                )
-                ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.16)
-                ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.16)
-                ax.set(
-                    xlabel="Vv [MeV]",
-                    ylabel=f"Re(c{coefficient_index + 1})",
-                    title=f"ROSE coordinate {coefficient_index + 1}",
-                )
-                ax.legend()
-            fig.suptitle("Vv-only ROSE-native coordinates")
-            fig.tight_layout()
+                    ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.12)
+                    ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.12)
+                    ax.set_title(fr"coordinate ${coordinate_data['symbol']}_{{{coordinate_index + 1}}}$")
+                    ax.set_ylabel(method, color=coordinate_data["color"])
+                    if row_index == len(vv_coordinate_data) - 1:
+                        ax.set_xlabel("Vv [MeV]")
+                axes[row_index, 0].legend(fontsize=8)
+            fig.suptitle("Vv-only coordinates: method rows and retained-coordinate columns")
+            fig.tight_layout(rect=(0, 0, 1, 0.96))
             plt.show()
             """
         ),
@@ -406,13 +412,13 @@ def notebook_cells() -> list:
             fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
             axes[0].plot(vv_case.radius, np.real(vv_case.high_fidelity[0]), color="black", label="true test solution")
             axes[0].plot(vv_case.radius, np.real(vv_ls_wavefunctions[vv_representative_index]), "-.", color="blue", label="LS")
-            axes[0].plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
+            axes[0].plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color=METHOD_COLORS["lrom"], linewidth=2, label="LROM")
             axes[0].plot(vv_case.radius, np.real(vv_rose_wavefunctions[vv_representative_index]), "--", color="red", label="ROSE")
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"40Ca(n,n), l=0 noncentral Vv testing solution: {vv_representative_id}")
             axes[0].legend()
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), DISPLAY_ERROR_FLOOR), color="orange", label="LROM")
+            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), DISPLAY_ERROR_FLOOR), color=METHOD_COLORS["lrom"], label="LROM")
             axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
@@ -434,13 +440,13 @@ def notebook_cells() -> list:
             vv_errors["ls"] = np.abs(vv_ls_wavefunctions - vv_fom_test)
             vv_errors["rose"] = np.abs(vv_rose_wavefunctions - vv_fom_test)
             fig, ax = plt.subplots(figsize=(7.2, 4.0))
-            for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
+            for method in ("rose", "lrom", "ls"):
                 for error in vv_errors[method][vv_plot_mask]:
-                    ax.plot(r, np.maximum(error, DISPLAY_ERROR_FLOOR), color=color, alpha=0.16)
+                    ax.plot(r, np.maximum(error, DISPLAY_ERROR_FLOOR), color=METHOD_COLORS[method], alpha=0.16)
             ax.set_yscale("log")
             ax.set_xlabel("r [fm]")
             ax.set_ylabel("absolute difference")
-            ax.set_title("Vv-only testing errors: ROSE (red), LROM (orange), LS (blue)")
+            ax.set_title("Vv-only testing errors for ROSE, LROM, and LS")
             plt.show()
             """
         ),
@@ -592,6 +598,7 @@ def notebook_cells() -> list:
             # 4. Evaluate ROSE on the same ordered parameter rows as LS and LROM.
             ws3_train_rows = ws3_emulator.samples.design.training.values
             ws3_test_rows = ws3_emulator.samples.design.testing.values
+            ws3_rose_train_coefficients = np.asarray([ws3_rose_rbe.coefficients(row) for row in ws3_train_rows])
             ws3_rose_coefficients = np.asarray([ws3_rose_rbe.coefficients(row) for row in ws3_test_rows])
             ws3_rose_wf_train = np.asarray([ws3_rose_rbe.emulate_wave_function(row) for row in ws3_train_rows])
             ws3_rose_wf_test = np.asarray([ws3_rose_rbe.emulate_wave_function(row) for row in ws3_test_rows])
@@ -694,88 +701,85 @@ def notebook_cells() -> list:
             fig.tight_layout()
             plt.show()
 
-            coefficients = {
-                "ls": {0: ws3_ls_coefficients},
-                "lrom": dict(ws3_emulator.testing_results.coefficients["lrom"]),
+            # One shared coordinate figure keeps method and parameter comparisons
+            # aligned: rows are methods, columns are retained coordinates, and
+            # testing-point color records the second physical parameter Rv.
+            ws3_coordinate_data = {
+                "LS": {
+                    "training": ws3_ls_train_coefficients,
+                    "testing": ws3_ls_coefficients,
+                    "symbol": "a",
+                    "color": METHOD_COLORS["ls"],
+                },
+                "LROM": {
+                    "training": np.asarray(
+                        ws3_emulator.training_results.coefficients["lrom"][0]
+                    ),
+                    "testing": np.asarray(
+                        ws3_emulator.testing_results.coefficients["lrom"][0]
+                    ),
+                    "symbol": "a",
+                    "color": METHOD_COLORS["lrom"],
+                },
+                "ROSE": {
+                    "training": ws3_rose_train_coefficients,
+                    "testing": ws3_rose_coefficients,
+                    "symbol": "c",
+                    "color": METHOD_COLORS["rose"],
+                },
             }
-            ws3_lrom_coefficients = coefficients["lrom"][0]
-            fig, axes = plt.subplots(2, 2, figsize=(11.2, 7.0), sharex=True)
-            for row_index, (method, method_color) in enumerate(
-                (("ls", "blue"), ("lrom", "orange"))
+            ws3_rv_norm = plt.Normalize(
+                vmin=min(ws3_train_rows[:, 1].min(), ws3_test_rows[:, 1].min()),
+                vmax=max(ws3_train_rows[:, 1].max(), ws3_test_rows[:, 1].max()),
+            )
+            fig, axes = plt.subplots(3, BASIS_SIZE, figsize=(14.0, 8.0), sharex="col")
+            for row_index, (method, coordinate_data) in enumerate(
+                ws3_coordinate_data.items()
             ):
-                for coefficient_index, ax in enumerate(axes[row_index]):
-                    scatter = ax.scatter(
+                for coordinate_index in range(BASIS_SIZE):
+                    ax = axes[row_index, coordinate_index]
+                    ax.scatter(
+                        ws3_train_rows[:, 0],
+                        np.real(coordinate_data["training"][:, coordinate_index]),
+                        s=24,
+                        marker="o",
+                        facecolors="none",
+                        edgecolors="black",
+                        alpha=0.55,
+                        label="training" if coordinate_index == 0 else None,
+                    )
+                    ax.scatter(
                         ws3_test_rows[:, 0],
-                        np.real(coefficients[method][0][:, coefficient_index]),
+                        np.real(coordinate_data["testing"][:, coordinate_index]),
                         c=ws3_test_rows[:, 1],
                         cmap="viridis",
+                        norm=ws3_rv_norm,
                         s=24,
                         alpha=0.8,
+                        edgecolors=coordinate_data["color"],
+                        linewidths=0.6,
+                        label="testing" if coordinate_index == 0 else None,
                     )
                     for spine in ax.spines.values():
-                        spine.set_color(method_color)
-                        spine.set_linewidth(1.8)
-                    ax.set(
-                        ylabel=f"Re(a{coefficient_index + 1})",
-                        title=(
-                            f"{method.upper()} coordinate {coefficient_index + 1}: "
-                            "Vv, colored by Rv"
-                        ),
+                        spine.set_color(coordinate_data["color"])
+                        spine.set_linewidth(1.4)
+                    ax.set_title(
+                        fr"coordinate ${coordinate_data['symbol']}_{{{coordinate_index + 1}}}$"
                     )
-                    fig.colorbar(scatter, ax=ax, label="Rv [fm]")
-            for ax in axes[-1]:
-                ax.set_xlabel("Vv [MeV]")
-            fig.suptitle("ws_3 central-basis coordinates versus physical parameters")
-            fig.tight_layout()
-            plt.show()
-
-            ws3_coordinate_difference = np.abs(
-                ws3_ls_coefficients - ws3_lrom_coefficients
+                    ax.set_ylabel(method, color=coordinate_data["color"])
+                    if row_index == len(ws3_coordinate_data) - 1:
+                        ax.set_xlabel("Vv [MeV]")
+                axes[row_index, 0].legend(fontsize=8)
+            fig.colorbar(
+                plt.cm.ScalarMappable(norm=ws3_rv_norm, cmap="viridis"),
+                ax=axes,
+                label="Rv [fm]",
+                shrink=0.88,
             )
-            fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.8), sharex=True)
-            for coefficient_index, ax in enumerate(axes):
-                scatter = ax.scatter(
-                    ws3_test_rows[:, 0],
-                    np.maximum(
-                        ws3_coordinate_difference[:, coefficient_index],
-                        DISPLAY_ERROR_FLOOR,
-                    ),
-                    c=ws3_test_rows[:, 2],
-                    cmap="plasma",
-                    s=24,
-                    alpha=0.8,
-                )
-                ax.set_yscale("log")
-                ax.set(
-                    xlabel="Vv [MeV]",
-                    ylabel="absolute coefficient difference",
-                    title=f"|LS - LROM| for a{coefficient_index + 1}, colored by av",
-                )
-                fig.colorbar(scatter, ax=ax, label="av [fm]")
-            fig.tight_layout()
-            plt.show()
-
-            fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.8), sharex=True)
-            for coefficient_index, ax in enumerate(axes):
-                scatter = ax.scatter(
-                    ws3_test_rows[:, 0],
-                    np.real(ws3_rose_coefficients[:, coefficient_index]),
-                    c=ws3_test_rows[:, 2],
-                    cmap="plasma",
-                    s=24,
-                    alpha=0.8,
-                )
-                for spine in ax.spines.values():
-                    spine.set_color("red")
-                    spine.set_linewidth(1.8)
-                ax.set(
-                    xlabel="Vv [MeV]",
-                    ylabel=f"Re(c{coefficient_index + 1})",
-                    title=f"ROSE coordinate {coefficient_index + 1}, colored by av",
-                )
-                fig.colorbar(scatter, ax=ax, label="av [fm]")
-            fig.suptitle("ws_3 ROSE-native coordinates")
-            fig.tight_layout()
+            fig.suptitle(
+                "ws_3 coordinates versus Vv, with testing cases colored by Rv"
+            )
+            fig.subplots_adjust(top=0.91, right=0.90, hspace=0.34, wspace=0.35)
             plt.show()
             """
         ),
@@ -798,13 +802,13 @@ def notebook_cells() -> list:
             fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
             axes[0].plot(case.radius, np.real(case.high_fidelity[0]), color="black", label="high fidelity")
             axes[0].plot(case.radius, np.real(ws3_ls_wf_test[representative_index]), "-.", color="blue", label="LS")
-            axes[0].plot(case.radius, np.real(case.lrom[0]), ":", color="orange", linewidth=2, label="LROM")
+            axes[0].plot(case.radius, np.real(case.lrom[0]), ":", color=METHOD_COLORS["lrom"], linewidth=2, label="LROM")
             axes[0].plot(case.radius, np.real(ws3_rose_wf_test[representative_index]), "--", color="red", label="ROSE")
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"Representative l=0 testing solution: {representative_id}")
             axes[0].legend()
             axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), DISPLAY_ERROR_FLOOR), color="orange", label="LROM")
+            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), DISPLAY_ERROR_FLOOR), color=METHOD_COLORS["lrom"], label="LROM")
             axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
@@ -817,7 +821,7 @@ def notebook_cells() -> list:
         code(
             """
             methods = ("ls", "lrom", "rose")
-            colors = ("blue", "orange", "red")
+            colors = tuple(METHOD_COLORS[method] for method in methods)
             positions = np.arange(1, 4)
             training_metrics = dict(ws3_emulator.training_results.metrics["relative_l2"][0])
             training_metrics["ls"] = ws3_ls_rel_train
