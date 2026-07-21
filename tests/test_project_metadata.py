@@ -61,3 +61,26 @@ def test_ci_covers_supported_python_versions() -> None:
     assert 'python-version: ["3.11", "3.12", "3.13"]' in text
     assert "pip install -e .[test]" in text
     assert "pytest -q" in text
+
+
+def test_architecture_understanding_guide_covers_user_ownership_model() -> None:
+    text = (ROOT / "docs" / "LROM_ARCHITECTURE_UNDERSTANDING.md").read_text()
+
+    for phrase in (
+        "LROMConfig",
+        "SamplingState",
+        "TrainingState",
+        "PredictionState",
+        "NuclearScatteringFOM",
+        "TrainingEngine",
+        "lrom_legacy.v1_2",
+        "central-reference",
+        "free-reference",
+        "Methodology",
+        "Before",
+        "After",
+        "Execution",
+        "What did not change",
+        "Final prose ownership",
+    ):
+        assert phrase in text
