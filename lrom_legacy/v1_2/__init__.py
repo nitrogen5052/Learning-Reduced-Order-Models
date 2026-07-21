@@ -23,27 +23,26 @@ Version 2.0 (cross sections) is parked in `lrom_legacy.v2_0` pending fixes.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-import numpy as np
-from collections.abc import Callable, Mapping
-import math
-from types import MappingProxyType
-from collections.abc import Mapping
-from typing import Any
-from collections.abc import Mapping, Sequence
-from scipy.stats import qmc
-from numba import njit
 from hashlib import sha256
 import io
 import json
+import math
 from pathlib import Path
 import platform
+from types import MappingProxyType
+from typing import Any
 import zipfile
 
+import numpy as np
+from numba import njit
+from scipy.stats import qmc
 
 # ==========================================================================
-# errors
+# 1. Physical configuration and potentials
+# Owns the immutable physical question and validates its named potential.
+# Does not own solver outputs, training data, or learned operators.
 # ==========================================================================
 
 class LROMError(Exception):
@@ -66,9 +65,7 @@ class LROMArtifactError(LROMError, ValueError):
     """Invalid or incompatible portable emulator artifact."""
 
 
-# ==========================================================================
-# potentials
-# ==========================================================================
+# -- Potential definitions -------------------------------------------------
 
 PotentialFunction = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -162,9 +159,7 @@ def custom_potential_spec(
     )
 
 
-# ==========================================================================
-# config
-# ==========================================================================
+# -- Immutable physical configuration -------------------------------------
 
 def _validate_nucleus(name: str, value: tuple[int, int]) -> tuple[int, int]:
     if (
@@ -228,7 +223,7 @@ class LROMConfig:
         target: tuple[int, int],
         projectile: tuple[int, int],
         lab_energy: float,
-        l: int | tuple[int, ...] = 0,
+        l: int | tuple[int, ...] = 0,  # noqa: E741 - standard partial-wave symbol
         fom: str = "nucl-scatter-eq",
         potential: str | PotentialFunction = "ws_3",
         central_parameters: Mapping[str, float] | None = None,
@@ -307,7 +302,9 @@ class LROMConfig:
 
 
 # ==========================================================================
-# state
+# 2. Parameter designs and lifecycle state
+# Owns named sample cases and the raw NumPy state produced at each stage.
+# Does not run ROSE, fit RF-LROM, or mutate the public object.
 # ==========================================================================
 
 @dataclass(frozen=True)
@@ -465,9 +462,7 @@ class TestingCase:
     ls: Mapping[int, np.ndarray] | None
 
 
-# ==========================================================================
-# sampling
-# ==========================================================================
+# -- Parameter-design builders --------------------------------------------
 
 def _validate_size(name: str, value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -749,7 +744,9 @@ def create_sampling_design(
 
 
 # ==========================================================================
-# basis
+# 3. Centered reduced basis
+# Owns compression of spatial wavefunction snapshots around phi0.
+# Does not learn parameter dependence or run a full-order solve.
 # ==========================================================================
 
 def _sqrt_trapezoid_weights(radius: np.ndarray) -> np.ndarray:
@@ -805,7 +802,8 @@ def project_coordinates(
 
     The radial integral is represented by trapezoid weights.  Multiplying both
     the basis and centered snapshots by the square-root weights turns the
-    weighted projection into an ordinary least-squares problem.  ``lstsq``
+    weighted basis projection into the ordinary system ``A a = b``, where
+    ``A = W**(1/2) Phi`` and ``b = W**(1/2) (phi - phi0)``.  ``lstsq``
     solves that problem directly with an SVD-based LAPACK routine; forming and
     solving normal equations would square the condition number and lose
     numerical accuracy.
@@ -832,6 +830,12 @@ def reconstruct(*, basis: BasisState, coordinates: np.ndarray) -> np.ndarray:
     return basis.phi0[np.newaxis, :] + coordinates @ basis.vectors.T
 
 
+# ==========================================================================
+# 4. Optional analysis utilities
+# Owns explicit benchmarks and raw error arrays used for diagnostics.
+# Does not participate in RF-LROM inference unless called by the user.
+# ==========================================================================
+
 def least_squares_baseline(
     *, basis: BasisState, wavefunctions: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -848,10 +852,6 @@ def least_squares_baseline(
     return coordinates, wavefunction
 
 
-# ==========================================================================
-# diagnostics
-# ==========================================================================
-
 def pointwise_absolute(*, prediction: np.ndarray, reference: np.ndarray) -> np.ndarray:
     return np.abs(np.asarray(prediction) - np.asarray(reference))
 
@@ -865,7 +865,9 @@ def relative_l2(*, prediction: np.ndarray, reference: np.ndarray) -> np.ndarray:
 
 
 # ==========================================================================
-# predictors
+# 5. Predictor construction
+# Owns the low-dimensional features p_j(alpha) used by RF-LROM.
+# Does not fit reduced operators or reconstruct wavefunctions.
 # ==========================================================================
 
 @dataclass(frozen=True)
@@ -1002,7 +1004,9 @@ def features_for_values(
 
 
 # ==========================================================================
-# rf
+# 6. RF-LROM numerical core
+# Owns the stacked operator fit and the small online reduced solve.
+# Does not generate high-fidelity data or choose the reduced basis.
 # ==========================================================================
 
 @dataclass(frozen=True)
@@ -1022,8 +1026,23 @@ class RFLROMModel:
         return int(self.vectors.shape[0])
 
 
-def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
-    """Fit the transformed implicit reduced equation by linear LS."""
+def fit_rf_lrom(
+    *, predictors: np.ndarray, coordinates: np.ndarray
+) -> RFLROMModel:
+    """Fit one stacked RF-LROM system with complex least squares.
+
+    For each sample, the reduced equation is linear in the unknown entries of
+    every predictor matrix ``M_j`` and vector ``b_j`` once the training
+    coordinate ``a`` is known.  Stacking all samples and reduced-equation rows
+    gives a design matrix with shape
+    ``(sample_count * basis_size, predictor_count * (basis_size**2 + basis_size))``.
+
+    One solve keeps the coupled equation visible and avoids independent fits
+    that could obscure its shared residual.  ``np.linalg.lstsq`` applies a
+    stable LAPACK least-squares solver directly; normal equations are avoided
+    because they square the condition number.  The fitted flat vector is then
+    unpacked into the small ``M_j`` matrices and ``b_j`` vectors used online.
+    """
     predictors = np.asarray(predictors, dtype=np.complex128)
     coordinates = np.asarray(coordinates, dtype=np.complex128)
     if predictors.ndim != 2 or coordinates.ndim != 2:
@@ -1038,6 +1057,8 @@ def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
         dtype=np.complex128,
     )
     target = -coordinates.reshape(-1)
+    # Each row encodes one component of
+    # (I + sum_j p_j M_j) a = sum_j p_j b_j.
     for sample_index, (feature_row, coordinate_row) in enumerate(
         zip(predictors, coordinates)
     ):
@@ -1075,8 +1096,10 @@ def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
     )
 
 
-def solve(*, model: RFLROMModel, predictors: np.ndarray) -> np.ndarray:
-    """Solve the small online implicit equation for reduced coordinates."""
+def solve_rf_lrom(
+    *, model: RFLROMModel, predictors: np.ndarray
+) -> np.ndarray:
+    """Perform the online reduced solve for each new predictor row."""
     predictors = np.asarray(predictors, dtype=np.complex128)
     if predictors.ndim == 1:
         predictors = predictors[np.newaxis, :]
@@ -1089,16 +1112,15 @@ def solve(*, model: RFLROMModel, predictors: np.ndarray) -> np.ndarray:
     for index, row in enumerate(predictors):
         matrix = identity + np.einsum("k,kij->ij", row, model.matrices)
         rhs = np.einsum("k,kj->j", row, model.vectors)
+        # This solve is only basis_size by basis_size; no spatial FOM is run.
         coordinates[index] = np.linalg.solve(matrix, rhs)
     return coordinates
 
 
-fit_rf_lrom = fit
-solve_rf_lrom = solve
-
-
 # ==========================================================================
-# fom
+# 7. Exact ROSE high-fidelity boundary
+# Owns physical-radius meshes and authoritative Runge-Kutta snapshots.
+# Does not build ROSE EIMs, reduced bases, predictors, or learned operators.
 # ==========================================================================
 
 def _import_rose() -> Any:
@@ -1321,7 +1343,9 @@ class NuclearScatteringFOM:
 
 
 # ==========================================================================
-# training
+# 8. RF-LROM training orchestration
+# Owns the visible sequence basis -> predictors -> coordinates -> RF fit.
+# Does not change the public lifecycle or compute an automatic LS baseline.
 # ==========================================================================
 
 def _channel_sort_key(channel) -> tuple[int, int]:
@@ -1421,83 +1445,81 @@ def _evaluate(
     )
 
 
-class TrainingEngine:
-    """Build centered LROM bases, fits, and testing diagnostics.
+def _reduced_basis_state(*, emulator, basis_size: int) -> TrainingState:
+    """Build only the centered basis state for each requested channel."""
+    channels = _trained_channels(emulator)
+    bases = {
+        channel: _centered_basis(
+            emulator=emulator, channel=channel, basis_size=basis_size
+        )
+        for channel in channels
+    }
+    return TrainingState(
+        basis=bases,
+        predictors=None,
+        rf_lrom={},
+        testing_results=None,
+        testing_errors={channel: {} for channel in channels},
+        training_options={"basis_size": basis_size},
+    )
 
-    ROSE is used only as the full-order solver during sampling; all ROSE
-    emulator comparisons are constructed in the notebooks with the public
-    nuclear-rose package.
-    """
 
-    def reduced_basis(self, *, emulator, basis_size: int) -> TrainingState:
-        bases = {
-            channel: _centered_basis(
-                emulator=emulator, channel=channel, basis_size=basis_size
-            )
-            for channel in _trained_channels(emulator)
-        }
-        return TrainingState(
-            basis=bases,
-            predictors=None,
-            rf_lrom={},
-            testing_results=None,
-            testing_errors={channel: {} for channel in _trained_channels(emulator)},
-            training_options={"basis_size": basis_size},
+def _train_state(
+    *, emulator, basis_size: int, predictor: str, predictor_count: int
+) -> TrainingState:
+    """Build the basis and predictor, then fit and evaluate RF-LROM."""
+    basis_only = _reduced_basis_state(emulator=emulator, basis_size=basis_size)
+    predictor_state = _predictor(
+        emulator=emulator, kind=predictor, count=predictor_count
+    )
+    samples = emulator.samples
+    bases = basis_only.basis
+    rf_models = {}
+    for channel in _trained_channels(emulator):
+        basis = bases[channel]
+        # Required RF-LROM step: the high-fidelity training snapshots become
+        # reduced coordinates before the reduced equation can be learned.
+        train_coordinates = project_coordinates(
+            basis=basis, wavefunctions=samples.training_wavefunctions[channel]
         )
+        rf_models[channel] = fit_rf_lrom(
+            predictors=predictor_state.training_features,
+            coordinates=train_coordinates,
+        )
+    training_results = _evaluate(
+        emulator=emulator,
+        bases=bases,
+        rf_models=rf_models,
+        wavefunctions=samples.training_wavefunctions,
+        predictor_features=predictor_state.training_features,
+    )
+    testing_results = _evaluate(
+        emulator=emulator,
+        bases=bases,
+        rf_models=rf_models,
+        wavefunctions=samples.testing_wavefunctions,
+        predictor_features=predictor_state.testing_features,
+    )
+    return TrainingState(
+        basis=bases,
+        predictors=predictor_state,
+        rf_lrom=rf_models,
+        testing_results=testing_results,
+        testing_errors=testing_results.metrics["pointwise_absolute"],
+        training_results=training_results,
+        training_options={
+            "basis_size": basis_size,
+            "predictor": predictor,
+            "predictor_count": predictor_count,
+        },
+    )
 
-    def train(
-        self,
-        *,
-        emulator,
-        basis_size: int,
-        predictor: str,
-        predictor_count: int,
-    ) -> TrainingState:
-        basis_only = self.reduced_basis(emulator=emulator, basis_size=basis_size)
-        predictor_state = _predictor(
-            emulator=emulator, kind=predictor, count=predictor_count
-        )
-        samples = emulator.samples
-        bases = basis_only.basis
-        rf_models = {}
-        for channel in _trained_channels(emulator):
-            basis = bases[channel]
-            train_coordinates = project_coordinates(
-                basis=basis, wavefunctions=samples.training_wavefunctions[channel]
-            )
-            model = fit_rf_lrom(
-                predictors=predictor_state.training_features,
-                coordinates=train_coordinates,
-            )
-            rf_models[channel] = model
-        training_results = _evaluate(
-            emulator=emulator,
-            bases=bases,
-            rf_models=rf_models,
-            wavefunctions=samples.training_wavefunctions,
-            predictor_features=predictor_state.training_features,
-        )
-        testing_results = _evaluate(
-            emulator=emulator,
-            bases=bases,
-            rf_models=rf_models,
-            wavefunctions=samples.testing_wavefunctions,
-            predictor_features=predictor_state.testing_features,
-        )
-        return TrainingState(
-            basis=bases,
-            predictors=predictor_state,
-            rf_lrom=rf_models,
-            testing_results=testing_results,
-            testing_errors=testing_results.metrics["pointwise_absolute"],
-            training_results=training_results,
-            training_options={
-                "basis_size": basis_size,
-                "predictor": predictor,
-                "predictor_count": predictor_count,
-            },
-        )
 
+# ==========================================================================
+# 9. RF-LROM prediction
+# Owns conversion of named inputs into features, coefficients, and phi0+Phi*a.
+# Does not run ROSE or modify trained operators.
+# ==========================================================================
 
 def _parameter_rows(*, emulator, parameters) -> np.ndarray:
     rows = [parameters] if isinstance(parameters, Mapping) else list(parameters)
@@ -1546,7 +1568,9 @@ def predict(*, emulator, parameters) -> PredictionState:
 
 
 # ==========================================================================
-# artifacts
+# 10. Portable artifacts
+# Owns safe serialization of prediction-critical arrays and provenance.
+# Does not serialize live ROSE objects or full sampling data.
 # ==========================================================================
 
 ARTIFACT_SCHEMA = 1
@@ -1764,7 +1788,9 @@ def load_artifact(*, path: str | Path) -> LROM:
 
 
 # ==========================================================================
-# emulator
+# 11. Public LROM lifecycle
+# Owns LROM -> sampling -> train -> predict -> save/load state transitions.
+# Delegates numerical work to the flat functions above.
 # ==========================================================================
 
 class LROM:
@@ -1776,7 +1802,7 @@ class LROM:
         target: tuple[int, int],
         projectile: tuple[int, int],
         lab_energy: float,
-        l: int | tuple[int, ...] = 0,
+        l: int | tuple[int, ...] = 0,  # noqa: E741 - standard partial-wave symbol
         fom: str = "nucl-scatter-eq",
         potential: str | PotentialFunction = "ws_3",
         central_parameters: Mapping[str, float] | None = None,
@@ -1797,7 +1823,6 @@ class LROM:
         self._training_state: TrainingState | None = None
         self._prediction_state: Any = None
         self._fom_provider: Any = None
-        self._training_engine: Any = None
         self._inference_only = False
         self._provenance: dict[str, Any] = {}
 
@@ -1909,11 +1934,6 @@ class LROM:
         self._central_parameters = central
         self._kinematics = kinematics
 
-    def _trainer(self) -> Any:
-        if self._training_engine is None:
-            self._training_engine = TrainingEngine()
-        return self._training_engine
-
     def _clear_training_state(self) -> None:
         self._training_state = None
         self._clear_prediction_state()
@@ -2008,8 +2028,7 @@ class LROM:
     def reduced_basis(self, *, basis_size: int) -> None:
         if not self.is_sampled:
             raise LROMStateError("call sampling() before reduced_basis()")
-        trainer = self._trainer()
-        self._training_state = trainer.reduced_basis(
+        self._training_state = _reduced_basis_state(
             emulator=self, basis_size=basis_size
         )
         self._clear_prediction_state()
@@ -2025,7 +2044,7 @@ class LROM:
             raise LROMStateError("a portable inference artifact cannot be retrained")
         if not self.is_sampled:
             raise LROMStateError("call sampling() before train()")
-        self._training_state = self._trainer().train(
+        self._training_state = _train_state(
             emulator=self,
             basis_size=basis_size,
             predictor=predictor,
@@ -2068,9 +2087,7 @@ class LROM:
         save_artifact(path=path, emulator=self)
 
 
-# ==========================================================================
-# public surface
-# ==========================================================================
+# -- Public module surface -------------------------------------------------
 
 __version__ = "1.2.0"
 

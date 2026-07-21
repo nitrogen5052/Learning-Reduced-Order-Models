@@ -84,3 +84,33 @@ def test_architecture_understanding_guide_covers_user_ownership_model() -> None:
         "Final prose ownership",
     ):
         assert phrase in text
+
+
+def test_v1_2_explains_rf_lrom_least_squares() -> None:
+    source = (ROOT / "lrom_legacy" / "v1_2" / "__init__.py").read_text()
+
+    for phrase in (
+        "weighted basis projection",
+        "stacked RF-LROM system",
+        "normal equations",
+        "condition number",
+        "online reduced solve",
+    ):
+        assert phrase in source
+
+    assert "class TrainingEngine" not in source
+    assert "def _train_state" in source
+    for boundary in (
+        "1. Physical configuration and potentials",
+        "2. Parameter designs and lifecycle state",
+        "3. Centered reduced basis",
+        "4. Optional analysis utilities",
+        "5. Predictor construction",
+        "6. RF-LROM numerical core",
+        "7. Exact ROSE high-fidelity boundary",
+        "8. RF-LROM training orchestration",
+        "9. RF-LROM prediction",
+        "10. Portable artifacts",
+        "11. Public LROM lifecycle",
+    ):
+        assert boundary in source
