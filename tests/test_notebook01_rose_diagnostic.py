@@ -11,5 +11,13 @@ def test_diagnostic_bootstraps_the_repository_root_before_package_import() -> No
     assert "ROOT = Path(__file__).resolve().parents[2]" in text
     assert "sys.path.insert(0, str(ROOT))" in text
     assert text.index("sys.path.insert(0, str(ROOT))") < text.index(
-        "import lrom_legacy.v1_2 as lrom"
+        "import lrom"
     )
+
+
+def test_diagnostic_owns_its_rose_eim() -> None:
+    text = SCRIPT.read_text()
+
+    assert "rose.InteractionEIMSpace(" in text
+    assert "emulator.full_order_model[0].interaction" not in text
+    assert "eim_basis_size" not in text

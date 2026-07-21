@@ -58,6 +58,7 @@ def notebook_cells() -> list:
             "import matplotlib.pyplot as plt",
             "from matplotlib.lines import Line2D",
             "from matplotlib.patches import Patch",
+            "from numba import njit",
             "import numpy as np",
             "import pandas as pd",
             "",
@@ -78,6 +79,12 @@ def notebook_cells() -> list:
             "BASIS_SIZE = 4",
             "DISPLAY_ERROR_FLOOR = 1e-11",
             'print("LROM package:", lrom.__version__)',
+            "",
+            "@njit",
+            "def rose_real_woods_saxon(radius, alpha):",
+            "    # ROSE evaluates this exact callback for HF solves and builds its EIM from it.",
+            "    vv, rv, av = alpha",
+            "    return -vv / (1.0 + np.exp((radius - rv) / av))",
             "",
             'plt.rcParams["figure.dpi"] = 130',
             'plt.rcParams["axes.grid"] = True',
@@ -175,6 +182,33 @@ def notebook_cells() -> list:
             print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
             print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
 
+            # Following the ROSE tutorial, this notebook owns the EIM used only
+            # by the ROSE reduced equations. Package FOM sampling remains exact.
+            vv_central_row = np.asarray(
+                [vv_center[name] for name in vv_emulator.parameter_names]
+            )
+            vv_rose_rows = np.vstack([
+                vv_central_row,
+                vv_emulator.samples.design.training.values,
+                vv_emulator.samples.design.testing.values,
+            ])
+            vv_rose_bounds = np.column_stack([
+                vv_rose_rows.min(axis=0),
+                vv_rose_rows.max(axis=0),
+            ])
+            vv_rose_interactions = rose.InteractionEIMSpace(
+                l_max=0,
+                coordinate_space_potential=rose_real_woods_saxon,
+                n_theta=len(vv_emulator.parameter_names),
+                mu=vv_emulator.kinematics.mu,
+                energy=vv_emulator.kinematics.e_com,
+                is_complex=False,
+                training_info=vv_rose_bounds,
+                n_basis=8,
+                rho_mesh=vv_emulator.samples.mesh.rho,
+            )
+            vv_rose_interaction = vv_rose_interactions.interactions[0][0]
+
             # ROSE uses its free-solution reference and builds its own four-vector basis
             # from the same high-fidelity training snapshots used by LROM.
             vv_rose_phi0 = np.asarray([
@@ -193,7 +227,7 @@ def notebook_cells() -> list:
                 scale=False,
             )
             vv_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
-                vv_emulator.full_order_model[0].interaction,
+                vv_rose_interaction,
                 vv_rose_basis,
                 s_0=vv_emulator.full_order_model[0].base_solver.s_0,
                 initialize_emulator=True,
@@ -503,6 +537,33 @@ def notebook_cells() -> list:
                 reference=ws3_fom_test,
             )
 
+            # The ws_3 ROSE comparison owns a separate non-affine EIM over the
+            # central, training, and wider testing parameter region.
+            ws3_central_row = np.asarray(
+                [ws3_center[name] for name in ws3_emulator.parameter_names]
+            )
+            ws3_rose_rows = np.vstack([
+                ws3_central_row,
+                ws3_emulator.samples.design.training.values,
+                ws3_emulator.samples.design.testing.values,
+            ])
+            ws3_rose_bounds = np.column_stack([
+                ws3_rose_rows.min(axis=0),
+                ws3_rose_rows.max(axis=0),
+            ])
+            ws3_rose_interactions = rose.InteractionEIMSpace(
+                l_max=0,
+                coordinate_space_potential=rose_real_woods_saxon,
+                n_theta=len(ws3_emulator.parameter_names),
+                mu=ws3_emulator.kinematics.mu,
+                energy=ws3_emulator.kinematics.e_com,
+                is_complex=False,
+                training_info=ws3_rose_bounds,
+                n_basis=8,
+                rho_mesh=ws3_emulator.samples.mesh.rho,
+            )
+            ws3_rose_interaction = ws3_rose_interactions.interactions[0][0]
+
             # The ws_3 ROSE emulator uses the same free-reference construction.
             ws3_rose_phi0 = np.asarray([
                 rose.free_solutions.phi_free(float(rho), 0, ws3_emulator.kinematics.eta)
@@ -520,7 +581,7 @@ def notebook_cells() -> list:
                 scale=False,
             )
             ws3_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
-                ws3_emulator.full_order_model[0].interaction,
+                ws3_rose_interaction,
                 ws3_rose_basis,
                 s_0=ws3_emulator.full_order_model[0].base_solver.s_0,
                 initialize_emulator=True,

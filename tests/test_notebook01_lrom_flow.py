@@ -127,6 +127,15 @@ def test_notebook01_rose_uses_free_reference_without_lrom_basis_overwrites() -> 
     assert "ws3_rose_basis.phi_0 =" not in text
 
 
+def test_notebook01_owns_the_rose_eim_interactions() -> None:
+    text = source()
+
+    assert text.count("rose.InteractionEIMSpace(") == 2
+    assert ".full_order_model[0].interaction" not in text
+    assert "training_info=vv_rose_bounds" in text
+    assert "training_info=ws3_rose_bounds" in text
+
+
 def test_notebook01_declares_equal_rank_but_separate_coordinate_conventions() -> None:
     text = source()
 

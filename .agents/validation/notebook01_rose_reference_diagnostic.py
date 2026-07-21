@@ -8,21 +8,28 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import scipy.special
+import scipy.special  # noqa: E402 - repository bootstrap must run first
 
 if not hasattr(scipy.special, "sph_harm") and hasattr(scipy.special, "sph_harm_y"):
     scipy.special.sph_harm = lambda m, n, theta, phi: scipy.special.sph_harm_y(
         n, m, phi, theta
     )
 
-import numpy as np
-import rose
+import numpy as np  # noqa: E402
+import rose  # noqa: E402
+from numba import njit  # noqa: E402
 
-import lrom_legacy.v1_2 as lrom
+import lrom  # noqa: E402
 
 
 CASE_IDS = ("test-0021", "test-0039", "test-0065")
 BASIS_SIZE = 4
+
+
+@njit
+def rose_real_woods_saxon(radius, alpha):
+    vv, rv, av = alpha
+    return -vv / (1.0 + np.exp((radius - rv) / av))
 
 
 def reduced_matrix(rbe, theta: np.ndarray) -> np.ndarray:
@@ -34,7 +41,9 @@ def reduced_matrix(rbe, theta: np.ndarray) -> np.ndarray:
     )
 
 
-def build_rbe(emulator, phi0: np.ndarray, *, overwrite_with_lrom: bool):
+def build_rbe(
+    emulator, interaction, phi0: np.ndarray, *, overwrite_with_lrom: bool
+):
     basis = rose.basis.CustomBasis(
         solutions=np.asarray(
             emulator.samples.training_wavefunctions[0], dtype=np.complex128
@@ -54,7 +63,7 @@ def build_rbe(emulator, phi0: np.ndarray, *, overwrite_with_lrom: bool):
         )
         basis.phi_0 = np.asarray(emulator.basis[0].phi0, dtype=np.complex128)
     return rose.reduced_basis_emulator.ReducedBasisEmulator(
-        emulator.full_order_model[0].interaction,
+        interaction,
         basis,
         s_0=emulator.full_order_model[0].base_solver.s_0,
         initialize_emulator=True,
@@ -85,10 +94,10 @@ def main() -> None:
         testing_ranges=testing_ranges,
         training_size=70,
         testing_size=81,
-        mesh_size=900,
+        mesh_size=800,
         strategy="latin_hypercube",
         seed=1204,
-        eim_basis_size=8,
+        high_fidelity_solver="runge_kutta",
     )
     emulator.train(
         basis_size=BASIS_SIZE,
@@ -96,8 +105,29 @@ def main() -> None:
         predictor_count=6,
     )
 
+    central_row = np.asarray([center[name] for name in emulator.parameter_names])
+    rose_rows = np.vstack([
+        central_row,
+        emulator.samples.design.training.values,
+        emulator.samples.design.testing.values,
+    ])
+    rose_bounds = np.column_stack([rose_rows.min(axis=0), rose_rows.max(axis=0)])
+    interactions = rose.InteractionEIMSpace(
+        l_max=0,
+        coordinate_space_potential=rose_real_woods_saxon,
+        n_theta=len(emulator.parameter_names),
+        mu=emulator.kinematics.mu,
+        energy=emulator.kinematics.e_com,
+        is_complex=False,
+        training_info=rose_bounds,
+        n_basis=8,
+        rho_mesh=emulator.samples.mesh.rho,
+    )
+    interaction = interactions.interactions[0][0]
+
     central_rbe = build_rbe(
         emulator,
+        interaction,
         emulator.samples.central_wavefunctions[0],
         overwrite_with_lrom=True,
     )
@@ -110,7 +140,9 @@ def main() -> None:
         ],
         dtype=np.complex128,
     )
-    free_rbe = build_rbe(emulator, free_phi0, overwrite_with_lrom=False)
+    free_rbe = build_rbe(
+        emulator, interaction, free_phi0, overwrite_with_lrom=False
+    )
 
     print(
         "| reference | case | interpolation | Vv [MeV] | Rv [fm] | av [fm] "
