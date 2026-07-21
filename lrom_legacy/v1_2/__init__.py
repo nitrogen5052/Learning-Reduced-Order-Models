@@ -429,11 +429,16 @@ class BasisState:
 
 @dataclass(frozen=True)
 class TestingResults:
-    """Testing-set wavefunctions produced by every approved method."""
+    """Automatic RF-LROM diagnostics for a sampled data set.
+
+    ``ls`` remains as a compatibility slot, but training deliberately leaves it
+    empty.  A least-squares reconstruction is a separate benchmark, not part of
+    the learned RF-LROM model; request it with ``least_squares_baseline``.
+    """
 
     high_fidelity: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
-    ls: Mapping[int, np.ndarray]
+    ls: Mapping[int, np.ndarray] | None
     coefficients: Mapping[str, Mapping[int, np.ndarray]]
     metrics: Mapping[str, Mapping[int, Mapping[str, np.ndarray]]]
 
@@ -457,7 +462,7 @@ class TestingCase:
     radius: np.ndarray
     high_fidelity: Mapping[int, np.ndarray]
     lrom: Mapping[int, np.ndarray]
-    ls: Mapping[int, np.ndarray]
+    ls: Mapping[int, np.ndarray] | None
 
 
 # ==========================================================================
@@ -796,7 +801,15 @@ def build_basis(
 def project_coordinates(
     *, basis: BasisState, wavefunctions: np.ndarray
 ) -> np.ndarray:
-    """Compute trapezoid-weighted least-squares coordinates."""
+    """Express snapshots in the reduced basis for RF-LROM training.
+
+    The radial integral is represented by trapezoid weights.  Multiplying both
+    the basis and centered snapshots by the square-root weights turns the
+    weighted projection into an ordinary least-squares problem.  ``lstsq``
+    solves that problem directly with an SVD-based LAPACK routine; forming and
+    solving normal equations would square the condition number and lose
+    numerical accuracy.
+    """
     wavefunctions = np.asarray(wavefunctions, dtype=np.complex128)
     if wavefunctions.ndim != 2 or wavefunctions.shape[1] != basis.phi0.size:
         raise ValueError("wavefunctions must have shape (sample_count, mesh_size)")
@@ -817,6 +830,22 @@ def reconstruct(*, basis: BasisState, coordinates: np.ndarray) -> np.ndarray:
     if coordinates.ndim != 2 or coordinates.shape[1] != basis.basis_size:
         raise ValueError("coordinates must have shape (sample_count, basis_size)")
     return basis.phi0[np.newaxis, :] + coordinates @ basis.vectors.T
+
+
+def least_squares_baseline(
+    *, basis: BasisState, wavefunctions: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the optional best-in-basis reconstruction benchmark.
+
+    This benchmark sees the target high-fidelity wavefunction, so it answers a
+    different question from RF-LROM prediction: how accurately could this
+    fixed basis reconstruct the target if its optimal coefficients were known?
+    Keeping the call explicit prevents that oracle calculation from being
+    mistaken for part of the learned LROM algorithm.
+    """
+    coordinates = project_coordinates(basis=basis, wavefunctions=wavefunctions)
+    wavefunction = reconstruct(basis=basis, coordinates=coordinates)
+    return coordinates, wavefunction
 
 
 # ==========================================================================
@@ -1354,56 +1383,37 @@ def _evaluate(
 ) -> TestingResults:
     high_fidelity = dict(wavefunctions)
     lrom_wavefunctions = {}
-    ls_wavefunctions = {}
-    coefficient_sets: dict[str, dict[object, np.ndarray]] = {
-        "ls": {},
-        "lrom": {},
-    }
+    lrom_coefficients: dict[object, np.ndarray] = {}
     pointwise_metrics: dict[object, dict[str, np.ndarray]] = {}
     relative_metrics: dict[object, dict[str, np.ndarray]] = {}
     for channel in _trained_channels(emulator):
         basis = bases[channel]
-        ls_coordinates = project_coordinates(
-            basis=basis,
-            wavefunctions=high_fidelity[channel],
-        )
         lrom_coordinates = solve_rf_lrom(
             model=rf_models[channel],
             predictors=predictor_features,
         )
-        coefficient_sets["ls"][channel] = ls_coordinates
-        coefficient_sets["lrom"][channel] = lrom_coordinates
-        ls_wavefunctions[channel] = reconstruct(
-            basis=basis,
-            coordinates=ls_coordinates,
-        )
+        lrom_coefficients[channel] = lrom_coordinates
         lrom_wavefunctions[channel] = reconstruct(
             basis=basis,
             coordinates=lrom_coordinates,
         )
-        predictions = {
-            "lrom": lrom_wavefunctions[channel],
-            "ls": ls_wavefunctions[channel],
-        }
         pointwise_metrics[channel] = {
-            method: pointwise_absolute(
-                prediction=prediction,
+            "lrom": pointwise_absolute(
+                prediction=lrom_wavefunctions[channel],
                 reference=high_fidelity[channel],
             )
-            for method, prediction in predictions.items()
         }
         relative_metrics[channel] = {
-            method: relative_l2(
-                prediction=prediction,
+            "lrom": relative_l2(
+                prediction=lrom_wavefunctions[channel],
                 reference=high_fidelity[channel],
             )
-            for method, prediction in predictions.items()
         }
     return TestingResults(
         high_fidelity=high_fidelity,
         lrom=lrom_wavefunctions,
-        ls=ls_wavefunctions,
-        coefficients=coefficient_sets,
+        ls=None,
+        coefficients={"lrom": lrom_coefficients},
         metrics={
             "relative_l2": relative_metrics,
             "pointwise_absolute": pointwise_metrics,
@@ -2049,7 +2059,7 @@ class LROM:
                 for channel, values in results.high_fidelity.items()
             },
             lrom={channel: values[index] for channel, values in results.lrom.items()},
-            ls={channel: values[index] for channel, values in results.ls.items()},
+            ls=None,
         )
 
     def save(self, *, path: str | Path) -> None:
