@@ -909,16 +909,16 @@ def notebook_cells() -> list:
                     if row_index == len(ws3_coordinate_data) - 1:
                         ax.set_xlabel("Vv [MeV]")
                 axes[row_index, 0].legend(fontsize=8)
+            fig.subplots_adjust(top=0.91, right=0.89, hspace=0.34, wspace=0.35)
+            ws3_colorbar_ax = fig.add_axes([0.92, 0.13, 0.015, 0.74])
             fig.colorbar(
                 plt.cm.ScalarMappable(norm=ws3_rv_norm, cmap="viridis"),
-                ax=axes,
+                cax=ws3_colorbar_ax,
                 label="Rv [fm]",
-                shrink=0.88,
             )
             fig.suptitle(
                 "ws_3 coordinates versus Vv, with testing cases colored by Rv"
             )
-            fig.subplots_adjust(top=0.91, right=0.90, hspace=0.34, wspace=0.35)
             plt.show()
             """
         ),
@@ -950,8 +950,12 @@ def notebook_cells() -> list:
                 0.5 * (ws3_testing_ranges[name][1] - ws3_testing_ranges[name][0])
                 for name in ws3_emulator.parameter_names
             ])
+            ws3_selection_center_row = np.asarray([
+                ws3_center[name] for name in ws3_emulator.parameter_names
+            ])
             ws3_normalized_distance = np.linalg.norm(
-                (ws3_test_rows - ws3_center_row) / ws3_testing_half_ranges,
+                (ws3_test_rows - ws3_selection_center_row)
+                / ws3_testing_half_ranges,
                 axis=1,
             )
             ws3_training_overlap = np.any(

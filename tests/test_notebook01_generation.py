@@ -4,10 +4,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import nbformat as nbf
+
 from tools import generate_notebook01
 
 
 ROOT = Path(__file__).resolve().parents[1]
+NOTEBOOK = ROOT / "notebooks" / "01_rbm_vs_lrom_single_wavefunction.ipynb"
 
 
 def notebook_source() -> str:
@@ -20,6 +23,18 @@ def test_notebook01_all_generated_code_cells_compile() -> None:
     for cell_index, cell in enumerate(generate_notebook01.notebook_cells()):
         if cell["cell_type"] == "code":
             compile(cell["source"], f"notebook01-cell-{cell_index}", "exec")
+
+
+def test_notebook01_file_matches_the_authoritative_generator() -> None:
+    stored = nbf.read(NOTEBOOK, as_version=4)
+    expected = generate_notebook01.notebook_cells()
+
+    assert [cell["cell_type"] for cell in stored.cells] == [
+        cell["cell_type"] for cell in expected
+    ]
+    assert [cell["source"] for cell in stored.cells] == [
+        cell["source"] for cell in expected
+    ]
 
 
 def test_notebook01_bootstrap_finds_public_v1_2_package() -> None:

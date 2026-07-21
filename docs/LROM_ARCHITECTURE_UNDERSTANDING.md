@@ -184,6 +184,34 @@ The notebook-owned ROSE emulator uses a free-reference affine basis,
 
 Wavefunctions and errors can be compared because both reconstruct the same physical quantity. Raw coefficients cannot be compared as equal coordinates across the two conventions.
 
+## Notebook comparison-case selection
+
+Notebook 01 aligns high-fidelity, LS, LROM, and ROSE outputs by the shared
+testing-row index. A selected index therefore identifies one physical parameter
+row and the four results computed for that same row.
+
+The selection is deliberately independent of any single emulator:
+
+1. Build a testing-error table with columns `LS`, `LROM`, and `ROSE`.
+2. Remove near-central rows and exact training/testing overlaps. Near-central
+   means normalized distance below 0.25.
+3. Rank the eligible rows separately within each method's relative-L2 column.
+4. Average the three ranks to create a combined difficulty order.
+5. Display the distinct rows nearest the 25th, 50th, and 75th percentiles of
+   that order.
+
+For the one-parameter study, distance is
+`abs(Vv - Vv_central) / Vv_testing_half_range`. For the three-parameter study,
+each difference in `Vv`, `Rv`, and `av` is divided by its own testing
+half-range before taking the Euclidean norm. This prevents the units and scale
+of `Vv` from overwhelming the two geometry parameters.
+
+The executed notebook asserts that every selected case ID resolves to the same
+stored parameter row, that no selected row is near-central or a training
+duplicate, and that all three selected indices are distinct. The result is a
+comparison across lower, median, and upper combined difficulty without letting
+LROM, LS, ROSE, or an almost-central case choose the examples alone.
+
 ## Save/load boundary
 
 The artifact retains configuration, physical mesh, kinematics, reduced bases, predictor transformation, RF-LROM operators, and provenance required for prediction. It omits full sampling arrays and live ROSE objects. Loading restores prediction ability, not sampling.
@@ -240,5 +268,26 @@ Then ask:
 - **After:** Notebook 01 and benchmark 02 use public v1.2; benchmark 01 compares public v1.2 with explicit v2.0; benchmark 03 imports explicit v2.0. Notebook LS calls now show the basis and target wavefunctions at the call site.
 - **Execution:** Notebook 01 executes 14 of 14 code cells; benchmark 01 executes 4 of 4; benchmark 02 executes 24 of 24; benchmark 03 executes 10 of 10. None contains an error output. Benchmark 02 retains selected ROSE settings `(4, 8)` for `Vv` and `(4, 12)` for both `Rv` and the broad study.
 - **What did not change:** notebook section order, scientific cases, figures, physical mesh coordinates, ROSE held-out validation, or the project-map narrative.
+
+### Notebook 01 focused comparison
+
+- **Methodology:** compare methods on shared physical rows selected by averaged
+  within-method error ranks, after excluding near-central and training-overlap
+  cases.
+- **Before:** each study showed one case; the Vv case was almost central and the
+  ws_3 case was selected only from LROM error. Coordinate conventions occupied
+  separate figures, with extra spectrum, coefficient-difference, and joint-design
+  figures around them.
+- **After:** each study shows three matched cases at lower, median, and upper
+  combined difficulty. LS, LROM, and ROSE coordinates share one method-row by
+  coordinate-column figure; ws_3 testing points use one shared Rv color scale.
+  LROM is consistently yellow (`#E6AB02`), LS blue, and ROSE red.
+- **Execution:** Notebook 01 executes 14 of 14 code cells with zero error outputs.
+  The six selected parameter rows and their three relative-L2 errors are printed
+  immediately before the matched wavefunction figures. All ten stored figures
+  were rendered and inspected.
+- **What did not change:** package code, public v1.2 behavior, high-fidelity
+  sampling, training/testing designs, mesh size, retained rank, predictor count,
+  ROSE free-reference method, save/load behavior, or notebook section order.
 
 Final prose ownership: pending Daniel's review.

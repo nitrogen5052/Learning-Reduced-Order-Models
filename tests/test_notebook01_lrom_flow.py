@@ -128,6 +128,8 @@ def test_ws3_coordinates_share_one_method_by_coordinate_figure() -> None:
     assert "ws3_rose_train_coefficients" in text
     assert "ws3_rv_norm = plt.Normalize(" in text
     assert "c=ws3_test_rows[:, 1]" in text
+    assert "ws3_colorbar_ax = fig.add_axes(" in text
+    assert "cax=ws3_colorbar_ax" in text
     assert 'label="Rv [fm]"' in text
     assert "ws3_coordinate_difference" not in text
     assert "ws_3 ROSE-native coordinates" not in text
@@ -155,7 +157,9 @@ def test_ws3_selects_three_matched_noncentral_cases() -> None:
     text = source()
 
     assert "ws3_case_errors = np.column_stack(" in text
+    assert "ws3_selection_center_row = np.asarray([" in text
     assert "ws3_normalized_distance = np.linalg.norm(" in text
+    assert "ws3_test_rows - ws3_selection_center_row" in text
     assert "ws3_normalized_distance >= 0.25" in text
     assert "~ws3_training_overlap" in text
     assert "ws3_method_ranks" in text
