@@ -63,7 +63,7 @@ def notebook_cells() -> list:
             repo_bootstrap_source(),
             "",
             "for name in list(sys.modules):",
-            '    if name == "lrom" or name.startswith("lrom."):',
+            '    if name in ("lrom", "lrom_legacy") or name.startswith(("lrom.", "lrom_legacy.")):',
             "        del sys.modules[name]",
             "",
             "import scipy.special",
@@ -72,7 +72,11 @@ def notebook_cells() -> list:
             "    scipy.special.sph_harm = lambda m, n, theta, phi: scipy.special.sph_harm_y(n, m, phi, theta)",
             "",
             "import rose",
-            "import lrom",
+            "import lrom_legacy.v1_2 as lrom",
+            "",
+            "BASIS_SIZE = 4",
+            "DISPLAY_ERROR_FLOOR = 1e-11",
+            'print("LROM package:", lrom.__version__)',
             "",
             'plt.rcParams["figure.dpi"] = 130',
             'plt.rcParams["axes.grid"] = True',
@@ -90,11 +94,14 @@ def notebook_cells() -> list:
             scattering equation with ROSE/RBM and LROM approximations for the
             exact $l=0$ channel of $^{40}$Ca(n,n) at 14.1 MeV.
 
-            All horizontal axes use physical radius $r$ in fm. The package owns
-            LROM numerical state; the ROSE comparison is constructed here in the
-            notebook with the public `nuclear-rose` package, sharing the exact
-            `phi0` and basis vectors the package built, so Galerkin and learned
-            coefficients live in the same reduced space.
+            All horizontal axes use physical radius $r$ in fm. The LROM
+            calculations use the frozen `lrom_legacy.v1_2` implementation.
+            ROSE and LROM use the same high-fidelity training snapshots and retained rank,
+            but they use different reference functions: LROM is centered on the central
+            potential solution, while ROSE is centered on the free solution required by
+            its reduced-basis equations. Their reconstructed wavefunctions can be compared;
+            their coefficient values belong to different coordinate systems and are shown
+            separately.
             """
         ),
         md(
@@ -146,7 +153,7 @@ def notebook_cells() -> list:
                 eim_basis_size=8,
             )
             vv_emulator.train(
-                basis_size=4,
+                basis_size=BASIS_SIZE,
                 predictor="parameters",
                 predictor_count=1,
             )
@@ -155,21 +162,23 @@ def notebook_cells() -> list:
             print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
             print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
 
-            # Notebook-owned ROSE emulator on the package's exact reduced basis:
-            # hand ROSE the same phi0 and basis vectors, then let it do Galerkin.
+            # ROSE uses its free-solution reference and builds its own four-vector basis
+            # from the same high-fidelity training snapshots used by LROM.
+            vv_rose_phi0 = np.asarray([
+                rose.free_solutions.phi_free(float(rho), 0, vv_emulator.kinematics.eta)
+                for rho in vv_emulator.samples.mesh.rho
+            ], dtype=np.complex128)
             vv_rose_basis = rose.basis.CustomBasis(
                 solutions=np.asarray(vv_emulator.samples.training_wavefunctions[0], dtype=np.complex128).T.copy(),
-                phi_0=np.asarray(vv_emulator.samples.central_wavefunctions[0], dtype=np.complex128).copy(),
+                phi_0=vv_rose_phi0.copy(),
                 rho_mesh=vv_emulator.samples.mesh.rho,
-                n_basis=4,
+                n_basis=BASIS_SIZE,
                 solver=vv_emulator.full_order_model[0].solver,
                 subtract_phi0=True,
                 use_svd=True,
                 center=False,
                 scale=False,
             )
-            vv_rose_basis.vectors = np.asarray(vv_emulator.basis[0].vectors, dtype=np.complex128)
-            vv_rose_basis.phi_0 = np.asarray(vv_emulator.basis[0].phi0, dtype=np.complex128)
             vv_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
                 vv_emulator.full_order_model[0].interaction,
                 vv_rose_basis,
@@ -214,19 +223,18 @@ def notebook_cells() -> list:
             fig, ax = plt.subplots(figsize=(7.2, 3.8))
             for index in range(basis.basis_size):
                 ax.plot(r, np.real(basis.vectors[:, index]), label=f"basis {index + 1}")
-            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="Shared wavefunction basis")
+            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="LROM central-reference basis")
             ax.legend()
             plt.show()
 
             vv_test = vv_emulator.samples.design.testing.values[:, 0]
             coefficients = {key: dict(value) for key, value in vv_emulator.testing_results.coefficients.items()}
-            coefficients["rose"] = {0: vv_rose_coefficients}
             vv_train_low, vv_train_high = vv_training_ranges["Vv"]
             fig, axes = plt.subplots(2, 2, figsize=(11.0, 6.2), sharex="col")
             for coefficient_index in range(2):
                 ax = axes[0, coefficient_index]
                 difference_ax = axes[1, coefficient_index]
-                for method, color in (("ls", "blue"), ("lrom", "orange"), ("rose", "red")):
+                for method, color in (("ls", "blue"), ("lrom", "orange")):
                     ax.scatter(
                         vv_test,
                         np.real(coefficients[method][0][:, coefficient_index]),
@@ -240,16 +248,15 @@ def notebook_cells() -> list:
                 difference_ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.16)
                 difference_ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.16)
                 ls_coefficients = np.real(coefficients["ls"][0][:, coefficient_index])
-                for method, color in (("lrom", "orange"), ("rose", "red")):
-                    method_coefficients = np.real(coefficients[method][0][:, coefficient_index])
-                    difference_ax.scatter(
-                        vv_test,
-                        np.maximum(np.abs(ls_coefficients - method_coefficients), 1e-16),
-                        s=20,
-                        color=color,
-                        alpha=0.75,
-                        label=f"|LS - {method.upper()}|",
-                    )
+                lrom_coefficients = np.real(coefficients["lrom"][0][:, coefficient_index])
+                difference_ax.scatter(
+                    vv_test,
+                    np.maximum(np.abs(ls_coefficients - lrom_coefficients), DISPLAY_ERROR_FLOOR),
+                    s=20,
+                    color="orange",
+                    alpha=0.75,
+                    label="|LS - LROM|",
+                )
                 ax.set_ylabel(f"Re(a{coefficient_index + 1})")
                 ax.set_title(f"Basis coefficient {coefficient_index + 1}")
                 difference_ax.set_yscale("log")
@@ -257,7 +264,29 @@ def notebook_cells() -> list:
                 difference_ax.set_ylabel("absolute coefficient difference")
             axes[0, 0].legend()
             axes[1, 0].legend()
-            fig.suptitle("Vv-only testing coefficients: LS, ROSE, and LROM")
+            fig.suptitle("Vv-only LROM-coordinate diagnostics")
+            fig.tight_layout()
+            plt.show()
+
+            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8), sharex=True)
+            for coefficient_index, ax in enumerate(axes):
+                ax.scatter(
+                    vv_test,
+                    np.real(vv_rose_coefficients[:, coefficient_index]),
+                    s=22,
+                    color="red",
+                    alpha=0.75,
+                    label="ROSE",
+                )
+                ax.axvspan(vv_test.min(), vv_train_low, color="gray", alpha=0.16)
+                ax.axvspan(vv_train_high, vv_test.max(), color="gray", alpha=0.16)
+                ax.set(
+                    xlabel="Vv [MeV]",
+                    ylabel=f"Re(c{coefficient_index + 1})",
+                    title=f"ROSE coordinate {coefficient_index + 1}",
+                )
+                ax.legend()
+            fig.suptitle("Vv-only ROSE-native coordinates")
             fig.tight_layout()
             plt.show()
             """
@@ -350,25 +379,27 @@ def notebook_cells() -> list:
                 eim_basis_size=8,
             )
             ws3_emulator.train(
-                basis_size=4,
+                basis_size=BASIS_SIZE,
                 predictor="potential",
                 predictor_count=6,
             )
 
-            # Same notebook-owned ROSE construction as Section 1, on the ws_3 basis.
+            # The ws_3 ROSE emulator uses the same free-reference construction.
+            ws3_rose_phi0 = np.asarray([
+                rose.free_solutions.phi_free(float(rho), 0, ws3_emulator.kinematics.eta)
+                for rho in ws3_emulator.samples.mesh.rho
+            ], dtype=np.complex128)
             ws3_rose_basis = rose.basis.CustomBasis(
                 solutions=np.asarray(ws3_emulator.samples.training_wavefunctions[0], dtype=np.complex128).T.copy(),
-                phi_0=np.asarray(ws3_emulator.samples.central_wavefunctions[0], dtype=np.complex128).copy(),
+                phi_0=ws3_rose_phi0.copy(),
                 rho_mesh=ws3_emulator.samples.mesh.rho,
-                n_basis=4,
+                n_basis=BASIS_SIZE,
                 solver=ws3_emulator.full_order_model[0].solver,
                 subtract_phi0=True,
                 use_svd=True,
                 center=False,
                 scale=False,
             )
-            ws3_rose_basis.vectors = np.asarray(ws3_emulator.basis[0].vectors, dtype=np.complex128)
-            ws3_rose_basis.phi_0 = np.asarray(ws3_emulator.basis[0].phi0, dtype=np.complex128)
             ws3_rose_rbe = rose.reduced_basis_emulator.ReducedBasisEmulator(
                 ws3_emulator.full_order_model[0].interaction,
                 ws3_rose_basis,
@@ -420,15 +451,14 @@ def notebook_cells() -> list:
             fig, ax = plt.subplots(figsize=(7.2, 3.8))
             for index in range(ws3_basis.basis_size):
                 ax.plot(r3, np.real(ws3_basis.vectors[:, index]), label=f"basis {index + 1}")
-            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="ws_3 shared basis")
+            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="ws_3 LROM central-reference basis")
             ax.legend()
             plt.show()
 
             coefficients = {key: dict(value) for key, value in ws3_emulator.testing_results.coefficients.items()}
-            coefficients["rose"] = {0: ws3_rose_coefficients}
             case_number = np.arange(ws3_emulator.samples.design.testing.values.shape[0])
             fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.0), sharex=True)
-            for method, color in (("ls", "blue"), ("lrom", "orange"), ("rose", "red")):
+            for method, color in (("ls", "blue"), ("lrom", "orange")):
                 axes[0].scatter(
                     case_number,
                     np.real(coefficients[method][0][:, 0]),
@@ -438,21 +468,41 @@ def notebook_cells() -> list:
                     label=method.upper(),
                 )
             ws3_ls_coefficients = np.real(coefficients["ls"][0][:, 0])
-            for method, color in (("lrom", "orange"), ("rose", "red")):
-                method_coefficients = np.real(coefficients[method][0][:, 0])
-                axes[1].scatter(
-                    case_number,
-                    np.maximum(np.abs(ws3_ls_coefficients - method_coefficients), 1e-16),
-                    s=18,
-                    color=color,
-                    alpha=0.8,
-                    label=f"|LS - {method.upper()}|",
-                )
-            axes[0].set(ylabel="Re(first coordinate)", title="ws_3 shared-basis coordinates")
+            ws3_lrom_coefficients = np.real(coefficients["lrom"][0][:, 0])
+            axes[1].scatter(
+                case_number,
+                np.maximum(
+                    np.abs(ws3_ls_coefficients - ws3_lrom_coefficients),
+                    DISPLAY_ERROR_FLOOR,
+                ),
+                s=18,
+                color="orange",
+                alpha=0.8,
+                label="|LS - LROM|",
+            )
+            axes[0].set(ylabel="Re(first coordinate)", title="ws_3 LROM-coordinate diagnostics")
             axes[1].set_yscale("log")
             axes[1].set(xlabel="testing case", ylabel="absolute coefficient difference")
             axes[0].legend()
             axes[1].legend()
+            fig.tight_layout()
+            plt.show()
+
+            fig, ax = plt.subplots(figsize=(7.2, 3.8))
+            ax.scatter(
+                case_number,
+                np.real(ws3_rose_coefficients[:, 0]),
+                s=18,
+                color="red",
+                alpha=0.8,
+                label="ROSE",
+            )
+            ax.set(
+                xlabel="testing case",
+                ylabel="Re(first ROSE coordinate)",
+                title="ws_3 ROSE-native coordinates",
+            )
+            ax.legend()
             fig.tight_layout()
             plt.show()
             """
