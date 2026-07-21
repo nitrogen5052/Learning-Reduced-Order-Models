@@ -1,6 +1,6 @@
 # v1.2-First LROM Package Simplification Design
 
-**Status:** Architecture approved by the user on 2026-07-20, subject to the notebook-preservation contract below. The written specification still requires the user's review before implementation planning.
+**Status:** Approved by the user on 2026-07-20, including the notebook-preservation and public-object stability contracts. Ready for test-first implementation planning.
 
 ## Objective
 
@@ -72,7 +72,7 @@ The public object is rigid across this implementation pass. These entry points k
 - `save(...)`
 - `load(...)`
 
-The only approved public signature change is removal of `eim_basis_size` from `sampling()`, which the user explicitly requested. The only approved stored-result change is that `train()` stops calculating LS baselines automatically.
+The approved public signature changes are removal of `eim_basis_size` from `sampling()`, which the user explicitly requested, and addition of the backward-compatible visible option `high_fidelity_solver="runge_kutta"`. The only approved stored-result change is that `train()` stops calculating LS baselines automatically.
 
 `testing_results`, `training_results`, `testing_case()`, and `testing_errors` remain present for API stability. Their LROM and high-fidelity content remains available; compatibility LS fields become `None` or are omitted from method dictionaries because LS is opt-in analysis. Removing these public surfaces entirely is deferred. It would be a major restructure and requires a new explanation and explicit user approval.
 
@@ -167,6 +167,8 @@ The implementation will favor clear loops for the small reduced dimensions unles
 Current sampling constructs `rose.InteractionEIMSpace`, including a 1,000-snapshot potential ensemble and SVD, even though ROSE's Runge-Kutta equation calls the original coordinate-space potential through `interaction.v_r`.
 
 The package high-fidelity boundary will instead construct `rose.InteractionSpace`. This represents the exact coordinate-space interaction required by the Runge-Kutta solve and removes `eim_basis_size` from both v1.2 and the parked 2.0 shell.
+
+`sampling()` will expose `high_fidelity_solver="runge_kutta"` and reject unsupported names. This keeps the present solver choice visible without creating a speculative solver abstraction. A future JITR implementation will require its own design and user approval.
 
 Controlled evidence already obtained for the v1.2 ws_3 setup at mesh 800:
 
