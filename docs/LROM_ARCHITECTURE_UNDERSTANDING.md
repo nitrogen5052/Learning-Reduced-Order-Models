@@ -78,6 +78,20 @@ The banners in `lrom_legacy/v1_2/__init__.py` are stable reading landmarks.
 | `.save(...)` | Trained object | `save_artifact()` | Writes a portable `.lrom` file |
 | `lrom.load(...)` | Portable artifact | `load_artifact()` | Restores an inference-only object |
 
+## Notebook-to-package map
+
+Use this table to move from a notebook result to the package code that produced it.
+
+| Notebook section | Public calls or notebook-owned method | Package section to read |
+|---|---|---|
+| Notebook 01: varying `Vv` | `LROM()`, `sampling()`, `train()`, explicit `least_squares_baseline()` | 7 for exact snapshots; 3 for the basis; 4 for LS; 5-6 for RF-LROM |
+| Notebook 01: three-parameter predictors | `sampling()` followed by parameter- or potential-predictor `train()` | 5 for features; 6 for the operator fit |
+| Notebook 01: wavefunction emulation | stored results and `testing_case()` | 3 for reconstruction; 8 for evaluation |
+| Notebook 01: ROSE comparison | notebook-owned free-reference ROSE basis and EIM | Not package state; see the basis-reference and EIM boundaries below |
+| Benchmark 02 | public v1.2 plus explicit LS and notebook-owned ROSE validation | Same v1.2 sections as Notebook 01 |
+| Benchmark 01 | public v1.2 compared with explicit parked v2.0 | Version-routing check, not a new algorithm |
+| Benchmark 03 | explicit `lrom_legacy.v2_0` cross-section shell | Parked v2.0 only; it does not define public v1.2 behavior |
+
 ## Training data flow
 
 ```mermaid
@@ -210,5 +224,21 @@ Then ask:
 - **After:** notebook 01 constructs a separate ROSE basis around the free solution and compares reconstructed wavefunctions while keeping coefficient conventions separate.
 - **Execution:** controlled results are recorded in `.agents/validation/2026-07-20-notebook01-rose-reference-results.md`.
 - **What did not change:** installed packages, scientific archive, parameter samples, high-fidelity snapshots, or retained rank.
+
+### Parked v2.0 exact high-fidelity boundary
+
+- **Methodology:** high-fidelity sampling should evaluate the exact interaction; EIM belongs only to a reduced ROSE emulator.
+- **Before:** the parked v2.0 sampler built an EIM while preparing its high-fidelity wavefunctions.
+- **After:** v2.0 uses the same exact `InteractionSpace` boundary as v1.2 while retaining its spin-orbit and cross-section capabilities. It remains an explicit legacy import and is not the public package.
+- **Execution:** shared wavefunction configurations remain array-identical between v1.2 and v2.0. The executed cross-section benchmark has 10 of 10 code cells complete with no error outputs.
+- **What did not change:** v2.0's observable API, cross-section workflow, spin-orbit handling, benchmark inputs, or notebook-owned ROSE EIMs.
+
+### Notebook routing and explicit LS benchmarks
+
+- **Methodology:** each notebook names the package milestone it tests, and an LS oracle is requested only where a figure needs it.
+- **Before:** benchmark cells read LS coefficients and errors as if `train()` owned them, and versioned benchmarks depended on the public import changing meaning.
+- **After:** Notebook 01 and benchmark 02 use public v1.2; benchmark 01 compares public v1.2 with explicit v2.0; benchmark 03 imports explicit v2.0. Notebook LS calls now show the basis and target wavefunctions at the call site.
+- **Execution:** Notebook 01 executes 14 of 14 code cells; benchmark 01 executes 4 of 4; benchmark 02 executes 24 of 24; benchmark 03 executes 10 of 10. None contains an error output. Benchmark 02 retains selected ROSE settings `(4, 8)` for `Vv` and `(4, 12)` for both `Rv` and the broad study.
+- **What did not change:** notebook section order, scientific cases, figures, physical mesh coordinates, ROSE held-out validation, or the project-map narrative.
 
 Final prose ownership: pending Daniel's review.
