@@ -61,6 +61,23 @@ The predictive lifecycle remains:
 LROM(...) -> sampling(...) -> train(...) -> predict(...) -> save(...)
 ```
 
+## Public Object Stability Contract
+
+The public object is rigid across this implementation pass. These entry points keep their lifecycle meaning and behavior:
+
+- `LROM(...)`
+- `sampling(...)`
+- `train(...)`
+- `predict(...)`
+- `save(...)`
+- `load(...)`
+
+The only approved public signature change is removal of `eim_basis_size` from `sampling()`, which the user explicitly requested. The only approved stored-result change is that `train()` stops calculating LS baselines automatically.
+
+`testing_results`, `training_results`, `testing_case()`, and `testing_errors` remain present for API stability. Their LROM and high-fidelity content remains available; compatibility LS fields become `None` or are omitted from method dictionaries because LS is opt-in analysis. Removing these public surfaces entirely is deferred. It would be a major restructure and requires a new explanation and explicit user approval.
+
+Internal wrappers and functions may be flattened only when characterization tests prove that the public calls above retain the same configuration, state transitions, prediction arrays, and artifact behavior. Any proposed change to lifecycle order, parameter meaning, return/state shape beyond the approved LS separation, or saved-artifact contract must stop before implementation and return to the user for approval.
+
 ## Required Core
 
 The simplification audit identified these as required:
@@ -84,13 +101,13 @@ The implementation plan will prove each removal with tests before deleting it. E
 - Remove `eim_basis_size` and EIM construction from sampling.
 - Remove automatic LS baseline evaluation from `train()`.
 - Remove benchmark-only LS fields from `TrainingState`.
-- Remove `TestingResults`, `TestingCase`, `testing_errors`, and the stateful testing-result convenience properties if no non-notebook consumer remains after migration.
 - Flatten the one-implementation `TrainingEngine` wrapper into named training functions.
-- Remove the unused public `reduced_basis()` lifecycle path if no approved workflow requires a basis-only state.
 - Consolidate repeated imports and blank generated spacing.
 - Remove unsupported or unused flexibility only when repository-wide usage and a replacement path have been checked.
 
 The implementation must not delete configuration validation, save/load, or state invalidation merely to reduce line count.
+
+Public `TestingResults`, `TestingCase`, result properties, `reduced_basis()`, and lifecycle methods are not deletion candidates in this pass because of the Public Object Stability Contract.
 
 ## Least-Squares Responsibilities
 
