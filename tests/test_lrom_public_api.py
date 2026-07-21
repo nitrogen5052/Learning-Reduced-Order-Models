@@ -23,6 +23,15 @@ def test_notebook1_snapshot_imports_as_legacy_namespace() -> None:
     assert lrom_v2_0 is not lrom
 
 
+def test_parked_v2_matches_the_verified_single_file_shell() -> None:
+    assert inspect.signature(lrom_v2_0.LROM.train) == inspect.signature(
+        lrom.LROM.train
+    )
+    assert inspect.signature(lrom_v2_0.LROM.sampling) == inspect.signature(
+        lrom.LROM.sampling
+    )
+
+
 def test_constructor_is_keyword_only() -> None:
     parameters = inspect.signature(lrom.LROM).parameters
 
