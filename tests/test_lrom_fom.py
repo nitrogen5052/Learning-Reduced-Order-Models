@@ -22,7 +22,6 @@ def test_nuclear_scattering_fom_samples_l0_real_ws() -> None:
         mesh_size=64,
         strategy="linspace",
         seed=7,
-        eim_basis_size=2,
     )
 
     assert emulator.is_sampled

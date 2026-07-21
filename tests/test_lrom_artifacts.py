@@ -27,7 +27,6 @@ def trained_emulator() -> lrom.LROM:
         mesh_size=64,
         strategy="linspace",
         seed=5,
-        eim_basis_size=2,
     )
     emulator.train(basis_size=2, predictor="parameters")
     return emulator

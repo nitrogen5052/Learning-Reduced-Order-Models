@@ -5,6 +5,7 @@ from types import MappingProxyType
 import numpy as np
 import pytest
 
+import lrom_legacy.v1_2 as v1_2
 from lrom import LROM
 from lrom import LROMSamplingError, LROMStateError
 from lrom import Kinematics, MeshState, SamplingState, TrainingState
@@ -30,7 +31,7 @@ class FakeFOMProvider:
         design,
         mesh_size,
         radial_domain,
-        eim_basis_size,
+        high_fidelity_solver,
         solver_options,
     ) -> SamplingState:
         radius = np.linspace(0.0, 8.0, mesh_size)
@@ -62,28 +63,21 @@ class FakeFOMProvider:
         )
 
 
-class FakeTrainingEngine:
-    def train(
-        self,
-        *,
-        emulator,
-        basis_size,
-        predictor,
-        predictor_count,
-        operator_basis_size=None,
-        observable="wavefunction",
-        angles_degrees=None,
-    ) -> TrainingState:
-        return TrainingState(
-            basis={channel: f"basis-{channel}" for channel in emulator.partial_waves},
-            predictors={"kind": predictor, "count": predictor_count},
-            rf_lrom={channel: f"model-{channel}" for channel in emulator.partial_waves},
-            testing_results={"basis_size": basis_size},
-            testing_errors={channel: {} for channel in emulator.partial_waves},
-        )
+def fake_train_state(
+    *, emulator, basis_size, predictor, predictor_count
+) -> TrainingState:
+    return TrainingState(
+        basis={channel: f"basis-{channel}" for channel in emulator.partial_waves},
+        predictors={"kind": predictor, "count": predictor_count},
+        rf_lrom={channel: f"model-{channel}" for channel in emulator.partial_waves},
+        testing_results={"basis_size": basis_size},
+        testing_errors={channel: {} for channel in emulator.partial_waves},
+    )
 
 
-def make_emulator(*, l: int | tuple[int, ...] = 0) -> LROM:
+def make_emulator(
+    *, l: int | tuple[int, ...] = 0  # noqa: E741 - partial-wave symbol
+) -> LROM:
     emulator = LROM(
         target=(40, 20),
         projectile=(1, 0),
@@ -92,7 +86,6 @@ def make_emulator(*, l: int | tuple[int, ...] = 0) -> LROM:
         potential="ws_3",
     )
     emulator._fom_provider = FakeFOMProvider()
-    emulator._training_engine = FakeTrainingEngine()
     return emulator
 
 
@@ -181,7 +174,12 @@ def test_sampling_rejects_incomplete_or_mixed_grid_modes() -> None:
 def test_resampling_invalidates_downstream_state() -> None:
     emulator = make_emulator()
     emulator.sampling(**sampling_kwargs())
-    emulator.train()
+    emulator._training_state = fake_train_state(
+        emulator=emulator,
+        basis_size=4,
+        predictor="potential",
+        predictor_count=6,
+    )
     emulator._prediction_state = {"old": True}
     assert emulator.is_trained
 
@@ -194,9 +192,10 @@ def test_resampling_invalidates_downstream_state() -> None:
     assert emulator.predictions is None
 
 
-def test_train_updates_state_and_returns_none() -> None:
+def test_train_updates_state_and_returns_none(monkeypatch) -> None:
     emulator = make_emulator(l=(0, 1))
     emulator.sampling(**sampling_kwargs())
+    monkeypatch.setattr(v1_2, "_train_state", fake_train_state)
 
     result = emulator.train(basis_size=4, predictor="potential", predictor_count=6)
 

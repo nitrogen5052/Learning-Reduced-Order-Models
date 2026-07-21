@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
+import lrom_legacy.v2_0 as v2_0
 from lrom import LROM
-from lrom import build_parameter_predictor, build_potential_predictor
+from lrom import (
+    build_parameter_predictor,
+    build_potential_predictor,
+    least_squares_baseline,
+)
 
 
 def test_parameter_predictor_uses_named_centered_scales() -> None:
@@ -60,7 +65,6 @@ def test_real_ws1_training_stores_lrom_state() -> None:
         mesh_size=96,
         strategy="linspace",
         seed=9,
-        eim_basis_size=2,
     )
 
     emulator.train(basis_size=2, predictor="parameters")
@@ -71,19 +75,22 @@ def test_real_ws1_training_stores_lrom_state() -> None:
     assert emulator.rf_lrom[0].n_basis == 2
     assert emulator.testing_results.high_fidelity[0].shape == (5, 96)
     assert emulator.testing_results.lrom[0].shape == (5, 96)
-    assert emulator.testing_results.ls[0].shape == (5, 96)
+    assert emulator.testing_results.ls is None
     assert emulator.testing_results.metrics["relative_l2"][0]["lrom"].shape == (5,)
     assert emulator.training_results.high_fidelity[0].shape == (5, 96)
     for results in (emulator.training_results, emulator.testing_results):
-        for method in ("lrom", "ls"):
-            assert results.coefficients[method][0].shape == (5, 2)
-            assert results.metrics["relative_l2"][0][method].shape == (5,)
-            assert results.metrics["pointwise_absolute"][0][method].shape == (
-                5,
-                96,
-            )
+        assert results.coefficients["lrom"][0].shape == (5, 2)
+        assert results.metrics["relative_l2"][0]["lrom"].shape == (5,)
+        assert results.metrics["pointwise_absolute"][0]["lrom"].shape == (5, 96)
     assert emulator.testing_errors[0]["lrom"].shape == (5, 96)
-    assert emulator.testing_errors[0]["ls"].shape == (5, 96)
+    assert "ls" not in emulator.testing_errors[0]
+
+    ls_coordinates, ls_wavefunctions = least_squares_baseline(
+        basis=emulator.basis[0],
+        wavefunctions=emulator.testing_results.high_fidelity[0],
+    )
+    assert ls_coordinates.shape == (5, 2)
+    assert ls_wavefunctions.shape == (5, 96)
 
     case = emulator.testing_case(case_id="test-0002")
     assert case.case_id == "test-0002"
@@ -91,7 +98,7 @@ def test_real_ws1_training_stores_lrom_state() -> None:
     assert case.radius.shape == (96,)
     assert case.high_fidelity[0].shape == (96,)
     assert case.lrom[0].shape == (96,)
-    assert case.ls[0].shape == (96,)
+    assert case.ls is None
 
     emulator.predict(parameters={"Vv": 50.5})
 
@@ -124,7 +131,6 @@ def test_real_ws3_training_uses_potential_predictors() -> None:
         mesh_size=96,
         strategy="latin_hypercube",
         seed=11,
-        eim_basis_size=2,
     )
 
     emulator.train(basis_size=2, predictor="potential", predictor_count=2)
@@ -139,8 +145,8 @@ def test_real_ws3_training_uses_potential_predictors() -> None:
 
 
 
-def test_predict_produces_cross_sections_when_trained_for_observable() -> None:
-    emulator = LROM(
+def test_v2_shell_predicts_cross_sections_when_trained_for_observable() -> None:
+    emulator = v2_0.LROM(
         target=(40, 20),
         projectile=(1, 0),
         lab_energy=14.1,
@@ -175,15 +181,14 @@ def test_predict_produces_cross_sections_when_trained_for_observable() -> None:
     assert np.all(emulator.predictions.cross_sections.values > 0.0)
 
 
-def test_full_woods_saxon_predict_uses_spin_orbit_smatrix_channels() -> None:
-    from lrom import full_woods_saxon_central
+def test_v2_shell_full_woods_saxon_uses_spin_orbit_channels() -> None:
+    central = v2_0.full_woods_saxon_central(target_a=40)
 
-    central = full_woods_saxon_central(target_a=40)
     ranges = {
         name: tuple(sorted((0.98 * value, 1.02 * value)))
         for name, value in central.items()
     }
-    emulator = LROM(
+    emulator = v2_0.LROM(
         target=(40, 20),
         projectile=(1, 0),
         lab_energy=14.1,
@@ -219,20 +224,13 @@ def test_full_woods_saxon_predict_uses_spin_orbit_smatrix_channels() -> None:
     assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
 
 
-def test_potential_predictors_respond_to_spin_orbit_parameters() -> None:
-    from lrom import (
-        features_for_values,
-        full_woods_saxon,
-        full_woods_saxon_central,
-        full_woods_saxon_spin_orbit,
-    )
-
-    central = full_woods_saxon_central(target_a=40)
+def test_v2_shell_potential_predictors_respond_to_spin_orbit_parameters() -> None:
+    central = v2_0.full_woods_saxon_central(target_a=40)
     ranges = {
         name: tuple(sorted((0.98 * value, 1.02 * value)))
         for name, value in central.items()
     }
-    emulator = LROM(
+    emulator = v2_0.LROM(
         target=(40, 20),
         projectile=(1, 0),
         lab_energy=14.1,
@@ -259,10 +257,10 @@ def test_potential_predictors_respond_to_spin_orbit_parameters() -> None:
         central[name] * (1.10 if name == "Vso" else 1.0)
         for name in emulator.parameter_names
     ]
-    features = features_for_values(
+    features = v2_0.features_for_values(
         predictor=predictor,
         values=np.asarray([base, bumped]),
-        potential_function=full_woods_saxon,
-        spin_orbit_function=full_woods_saxon_spin_orbit,
+        potential_function=v2_0.full_woods_saxon,
+        spin_orbit_function=v2_0.full_woods_saxon_spin_orbit,
     )
     assert np.linalg.norm(features[1] - features[0]) > 0.1
