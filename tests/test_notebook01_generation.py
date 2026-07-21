@@ -67,6 +67,24 @@ def test_notebook01_keeps_the_three_scientific_sections() -> None:
     assert source.index(headings[0]) < source.index(headings[1]) < source.index(headings[2])
 
 
+def test_notebook01_preserves_the_project_map_figures_and_methods() -> None:
+    source = notebook_source()
+
+    for phrase in (
+        "Vv training potentials",
+        "High-fidelity training solutions",
+        "LROM central-reference basis",
+        "ROSE free-reference basis",
+        "potential predictors",
+        '("ls", "blue")',
+        '("lrom", "orange")',
+        '("rose", "red")',
+    ):
+        assert phrase in source
+    assert source.count("normalized singular value") >= 4
+    assert "def plot_" not in source
+
+
 def test_notebook01_contains_no_cross_section_workflow() -> None:
     source = notebook_source().lower()
 
