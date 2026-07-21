@@ -124,6 +124,17 @@ def test_notebook01_declares_equal_rank_but_separate_coordinate_conventions() ->
     assert "shared-basis" not in text.lower()
 
 
+def test_notebook01_reports_corrected_rose_outliers_by_named_case() -> None:
+    text = source()
+
+    assert "ws3_rose_coefficient_norm" in text
+    assert "ws3_rose_worst_indices" in text
+    assert "worst corrected ROSE cases" in text
+    assert "case_id" in text
+    assert "coefficient infinity norm" in text
+    assert "relative L2 error" in text
+
+
 def test_ws3_final_figure_is_relative_l2_violin_comparison() -> None:
     text = source()
 

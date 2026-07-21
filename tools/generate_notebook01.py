@@ -415,6 +415,16 @@ def notebook_cells() -> list:
             ws3_fom_test = ws3_emulator.samples.testing_wavefunctions[0]
             ws3_rose_rel_train = np.linalg.norm(ws3_rose_wf_train - ws3_fom_train, axis=1) / np.linalg.norm(ws3_fom_train, axis=1)
             ws3_rose_rel_test = np.linalg.norm(ws3_rose_wf_test - ws3_fom_test, axis=1) / np.linalg.norm(ws3_fom_test, axis=1)
+            ws3_rose_coefficient_norm = np.linalg.norm(ws3_rose_coefficients, ord=np.inf, axis=1)
+            ws3_rose_worst_indices = np.argsort(ws3_rose_coefficient_norm)[-3:][::-1]
+            print("worst corrected ROSE cases")
+            for index in ws3_rose_worst_indices:
+                print({
+                    "case_id": ws3_emulator.samples.design.testing.case_ids[index],
+                    "parameters": ws3_emulator.samples.design.testing.named(index=index),
+                    "coefficient infinity norm": float(ws3_rose_coefficient_norm[index]),
+                    "relative L2 error": float(ws3_rose_rel_test[index]),
+                })
             print("potential predictor radii [fm]:", ws3_emulator.predictors.selected_radii)
             """
         ),
