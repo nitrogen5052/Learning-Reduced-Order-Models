@@ -8,7 +8,7 @@ import lrom
 import lrom_legacy.v2_0 as v2_0
 
 
-def _build(module, *, eim_basis_size: int | None):
+def _build(module):
     emulator = module.LROM(
         target=(40, 20),
         projectile=(1, 0),
@@ -26,8 +26,7 @@ def _build(module, *, eim_basis_size: int | None):
         strategy="linspace",
         seed=1204,
     )
-    if eim_basis_size is not None:
-        sampling_options["eim_basis_size"] = eim_basis_size
+    sampling_options["high_fidelity_solver"] = "runge_kutta"
     emulator.sampling(**sampling_options)
     emulator.train(basis_size=3, predictor="parameters", predictor_count=1)
     emulator.predict(parameters={"Vv": 0.95 * vv})
@@ -41,12 +40,14 @@ def test_v2_shell_identity_and_cross_section_api() -> None:
     training_parameters = inspect.signature(v2_0.LROM.train).parameters
     assert "observable" in training_parameters
     assert "angles_degrees" in training_parameters
-    assert "eim_basis_size" in inspect.signature(v2_0.LROM.sampling).parameters
+    sampling_parameters = inspect.signature(v2_0.LROM.sampling).parameters
+    assert "eim_basis_size" not in sampling_parameters
+    assert sampling_parameters["high_fidelity_solver"].default == "runge_kutta"
 
 
 def test_v2_shell_matches_v1_2_for_the_shared_wavefunction_workflow() -> None:
-    active = _build(lrom, eim_basis_size=None)
-    parked = _build(v2_0, eim_basis_size=4)
+    active = _build(lrom)
+    parked = _build(v2_0)
 
     pairs = (
         (active.samples.central_wavefunctions[0], parked.samples.central_wavefunctions[0]),
@@ -59,4 +60,3 @@ def test_v2_shell_matches_v1_2_for_the_shared_wavefunction_workflow() -> None:
     )
     for active_values, parked_values in pairs:
         assert np.array_equal(active_values, parked_values)
-

@@ -161,7 +161,7 @@ def test_v2_shell_predicts_cross_sections_when_trained_for_observable() -> None:
         mesh_size=96,
         strategy="linspace",
         seed=9,
-        eim_basis_size=2,
+        high_fidelity_solver="runge_kutta",
     )
     angles = np.linspace(5.0, 175.0, 9)
     emulator.train(
@@ -203,7 +203,7 @@ def test_v2_shell_full_woods_saxon_uses_spin_orbit_channels() -> None:
         mesh_size=80,
         strategy="latin_hypercube",
         seed=13,
-        eim_basis_size=2,
+        high_fidelity_solver="runge_kutta",
     )
     angles = np.linspace(10.0, 170.0, 7)
     emulator.train(
@@ -245,7 +245,7 @@ def test_v2_shell_potential_predictors_respond_to_spin_orbit_parameters() -> Non
         mesh_size=80,
         strategy="latin_hypercube",
         seed=13,
-        eim_basis_size=3,
+        high_fidelity_solver="runge_kutta",
     )
     emulator.train(basis_size=2, predictor="potential", predictor_count=6)
 
