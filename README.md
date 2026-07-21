@@ -1,8 +1,9 @@
 # LROM
 
 LROM is a Python package for learning reduced-operator models of nuclear
-scattering wavefunctions. The whole package is **one file**
-(`lrom/__init__.py`) built around one object: `lrom.LROM` owns the physical
+scattering wavefunctions. The public `lrom` entry point exposes the **one-file
+v1.2 implementation** in `lrom_legacy/v1_2/__init__.py`. One object,
+`lrom.LROM`, coordinates the physical
 configuration, sampling design, full-order solutions, reduced basis,
 predictors, fitted model, diagnostics, and predictions through three calls —
 `.sampling()`, `.train()`, `.predict()`.
@@ -44,9 +45,9 @@ another notebook or machine for prediction.
 
 ## Repository layout
 
-- `lrom/`: the single-file version-1 package (current, 1.1.0)
-- `lrom_legacy/v2_0/`: the parked version 2.0 cross-section package
-  (needs fixes before it resumes; see its docstring)
+- `lrom/`: public entry point for the current v1.2 package
+- `lrom_legacy/v1_2/`: authoritative one-file wavefunction implementation
+- `lrom_legacy/v2_0/`: parked future cross-section shell
 - `notebooks/`: `01_rbm_vs_lrom_single_wavefunction.ipynb` (paper Notebook 1)
   and `benchmark_02.ipynb` (validates the package against the archived legacy
   notebook 02 — benchmarks are named after the legacy notebook they recreate)

@@ -72,7 +72,7 @@ def test_architecture_understanding_guide_covers_user_ownership_model() -> None:
         "TrainingState",
         "PredictionState",
         "NuclearScatteringFOM",
-        "TrainingEngine",
+        "_train_state",
         "lrom_legacy.v1_2",
         "central-reference",
         "free-reference",
@@ -84,6 +84,21 @@ def test_architecture_understanding_guide_covers_user_ownership_model() -> None:
         "Final prose ownership",
     ):
         assert phrase in text
+
+
+def test_docs_define_the_active_v1_2_stability_boundary() -> None:
+    architecture = (ROOT / "docs" / "LROM_ARCHITECTURE_UNDERSTANDING.md").read_text()
+    versioning = (ROOT / "docs" / "VERSIONING.md").read_text()
+    instructions = (ROOT / "CLAUDE.md").read_text()
+    combined = "\n".join((architecture, versioning, instructions))
+
+    for phrase in (
+        "v1.2 active package",
+        "Exact ROSE high-fidelity boundary",
+        "LS baseline is opt-in",
+        "major restructure requires user approval",
+    ):
+        assert phrase in combined
 
 
 def test_v1_2_explains_rf_lrom_least_squares() -> None:
