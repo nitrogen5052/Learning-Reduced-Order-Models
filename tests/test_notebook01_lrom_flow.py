@@ -40,9 +40,9 @@ def test_notebook01_plots_required_physical_diagnostics_explicitly() -> None:
 
     assert "selected_radii" in text
     assert "potential predictor radii" in text.lower()
-    assert "np.real(case.high_fidelity[0])" in text
-    assert "np.real(ws3_rose_wf_test[representative_index])" in text
-    assert "np.real(case.lrom[0])" in text
+    assert "np.real(ws3_case.high_fidelity[0])" in text
+    assert "np.real(ws3_rose_wf_test[selected_index])" in text
+    assert "np.real(ws3_case.lrom[0])" in text
     assert "vv_emulator.testing_errors[0]" in text
     assert 'ax.set_yscale("log")' in text
     assert 'ax.set_xlabel("r [fm]")' in text
@@ -91,20 +91,23 @@ def test_vv_coordinates_share_one_method_by_coordinate_figure() -> None:
     assert "absolute coefficient difference" not in text
 
 
-def test_vv_central_testing_wavefunction_compares_all_methods() -> None:
+def test_vv_selects_three_matched_noncentral_cases() -> None:
     text = source()
 
-    assert "candidate_indices = np.flatnonzero(vv_plot_mask)" in text
-    assert "vv_representative_index = candidate_indices[len(candidate_indices) // 2]" in text
-    assert "noncentral" in text
-    assert "vv_emulator.testing_case(case_id=vv_representative_id)" in text
-    for method in ("high_fidelity", "lrom"):
-        assert f"vv_case.{method}[0]" in text
-    assert "vv_ls_wavefunctions[vv_representative_index]" in text
-    assert "vv_rose_wavefunctions[vv_representative_index]" in text
-    assert "np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index])" in text
-    assert "np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0])" in text
-    assert "np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index])" in text
+    assert "vv_case_errors = np.column_stack(" in text
+    assert "vv_normalized_distance >= 0.25" in text
+    assert "~vv_training_overlap" in text
+    assert "vv_method_ranks" in text
+    assert "vv_candidate_errors[:, method_index]" in text
+    assert 'kind="stable"' in text
+    assert "vv_combined_rank = vv_method_ranks.mean(axis=1)" in text
+    assert "vv_difficulty_quantiles = np.array([0.25, 0.50, 0.75])" in text
+    assert "vv_selected_indices" in text
+    assert "assert len(np.unique(vv_selected_indices)) == 3" in text
+    assert 'fig, axes = plt.subplots(2, 3, figsize=(14.0, 7.0)' in text
+    assert "vv_emulator.testing_case(case_id=selected_id)" in text
+    assert "vv_ls_wavefunctions[selected_index]" in text
+    assert "vv_rose_wavefunctions[selected_index]" in text
 
 
 def test_vv_fixed_geometry_has_koning_delaroche_provenance() -> None:
@@ -142,9 +145,28 @@ def test_notebook01_uses_fixed_method_colors() -> None:
 def test_wavefunction_figures_keep_absolute_differences() -> None:
     text = source()
 
-    assert "np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index])" in text
-    assert "np.abs(case.high_fidelity[0] - case.lrom[0])" in text
-    assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text
+    assert "ws3_case.high_fidelity[0]" in text
+    assert "- ws3_ls_wf_test[selected_index]" in text
+    assert "- ws3_case.lrom[0]" in text
+    assert "- ws3_rose_wf_test[selected_index]" in text
+
+
+def test_ws3_selects_three_matched_noncentral_cases() -> None:
+    text = source()
+
+    assert "ws3_case_errors = np.column_stack(" in text
+    assert "ws3_normalized_distance = np.linalg.norm(" in text
+    assert "ws3_normalized_distance >= 0.25" in text
+    assert "~ws3_training_overlap" in text
+    assert "ws3_method_ranks" in text
+    assert "ws3_candidate_errors[:, method_index]" in text
+    assert 'kind="stable"' in text
+    assert "ws3_combined_rank = ws3_method_ranks.mean(axis=1)" in text
+    assert "ws3_difficulty_quantiles = np.array([0.25, 0.50, 0.75])" in text
+    assert "ws3_selected_indices" in text
+    assert "assert len(np.unique(ws3_selected_indices)) == 3" in text
+    assert 'fig, axes = plt.subplots(2, 3, figsize=(14.0, 7.0)' in text
+    assert "ws3_emulator.testing_case(case_id=selected_id)" in text
 
 
 def test_ws3_keeps_raw_parameter_and_colored_coefficient_diagnostics() -> None:

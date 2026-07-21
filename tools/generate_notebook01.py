@@ -396,34 +396,173 @@ def notebook_cells() -> list:
         ),
         md(
             """
-            A noncentral test case avoids the exact central-reference overlap and
-            gives a visible wavefunction comparison for all three methods.
+            Three matched testing cases replace an arbitrary representative row.
+            First remove near-central cases and any testing row that duplicates a
+            training row. Then rank each remaining row independently by LS, LROM,
+            and ROSE relative error. The mean of those three ranks defines a
+            method-neutral difficulty order; the displayed columns are nearest its
+            25th, 50th, and 75th percentiles.
             """
         ),
         code(
             """
-            candidate_indices = np.flatnonzero(vv_plot_mask)
-            vv_representative_index = candidate_indices[len(candidate_indices) // 2]
-            vv_representative_id = vv_emulator.samples.design.testing.case_ids[vv_representative_index]
-            vv_case = vv_emulator.testing_case(case_id=vv_representative_id)
-            print("selected noncentral Vv testing case:", vv_representative_id, dict(vv_case.parameters))
-            print("distance from central Vv [MeV]:", abs(vv_case.parameters["Vv"] - Vv0))
+            # Assemble one error row per testing case in the fixed LS/LROM/ROSE order.
+            vv_case_errors = np.column_stack((
+                vv_ls_relative_l2,
+                np.asarray(vv_emulator.testing_results.metrics["relative_l2"][0]["lrom"]),
+                lrom.relative_l2(
+                    prediction=vv_rose_wavefunctions,
+                    reference=vv_fom_test,
+                ),
+            ))
 
-            fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
-            axes[0].plot(vv_case.radius, np.real(vv_case.high_fidelity[0]), color="black", label="true test solution")
-            axes[0].plot(vv_case.radius, np.real(vv_ls_wavefunctions[vv_representative_index]), "-.", color="blue", label="LS")
-            axes[0].plot(vv_case.radius, np.real(vv_case.lrom[0]), ":", color=METHOD_COLORS["lrom"], linewidth=2, label="LROM")
-            axes[0].plot(vv_case.radius, np.real(vv_rose_wavefunctions[vv_representative_index]), "--", color="red", label="ROSE")
-            axes[0].set_ylabel("Re(phi)")
-            axes[0].set_title(f"40Ca(n,n), l=0 noncentral Vv testing solution: {vv_representative_id}")
-            axes[0].legend()
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_ls_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), DISPLAY_ERROR_FLOOR), color=METHOD_COLORS["lrom"], label="LROM")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
-            axes[1].set_yscale("log")
-            axes[1].set_xlabel("r [fm]")
-            axes[1].set_ylabel("absolute difference")
-            axes[1].legend()
+            # Exclude cases close to the central reference and exact train/test overlaps.
+            vv_testing_half_range = 0.5 * (
+                vv_testing_ranges["Vv"][1] - vv_testing_ranges["Vv"][0]
+            )
+            vv_normalized_distance = np.abs(vv_test - Vv0) / vv_testing_half_range
+            vv_training_overlap = np.any(
+                np.isclose(
+                    vv_test[:, None],
+                    vv_train[None, :],
+                    rtol=0.0,
+                    atol=1e-12,
+                ),
+                axis=1,
+            )
+            vv_candidate_indices = np.flatnonzero(
+                (vv_normalized_distance >= 0.25) & ~vv_training_overlap
+            )
+            assert len(vv_candidate_indices) >= 3
+
+            # Rank eligible rows separately for each method, then average the ranks.
+            vv_candidate_errors = vv_case_errors[vv_candidate_indices]
+            vv_method_ranks = np.empty_like(vv_candidate_errors, dtype=float)
+            for method_index in range(vv_candidate_errors.shape[1]):
+                method_order = np.argsort(
+                    vv_candidate_errors[:, method_index], kind="stable"
+                )
+                vv_method_ranks[method_order, method_index] = np.arange(
+                    len(vv_candidate_indices)
+                )
+            vv_combined_rank = vv_method_ranks.mean(axis=1)
+            vv_difficulty_order = vv_candidate_indices[
+                np.argsort(vv_combined_rank, kind="stable")
+            ]
+            vv_difficulty_quantiles = np.array([0.25, 0.50, 0.75])
+            vv_selected_positions = np.rint(
+                vv_difficulty_quantiles * (len(vv_difficulty_order) - 1)
+            ).astype(int)
+            vv_selected_indices = vv_difficulty_order[vv_selected_positions]
+            assert len(np.unique(vv_selected_indices)) == 3
+            assert np.all(vv_normalized_distance[vv_selected_indices] >= 0.25)
+            assert not np.any(vv_training_overlap[vv_selected_indices])
+
+            # Verify that case IDs, parameter rows, and every method use the same index.
+            vv_selected_ids = np.asarray(
+                vv_emulator.samples.design.testing.case_ids
+            )[vv_selected_indices]
+            vv_difficulty_labels = ("lower", "median", "upper")
+            vv_selected_records = []
+            for difficulty_label, selected_index, selected_id in zip(
+                vv_difficulty_labels, vv_selected_indices, vv_selected_ids
+            ):
+                vv_case = vv_emulator.testing_case(case_id=selected_id)
+                case_row = np.asarray([
+                    vv_case.parameters[name] for name in vv_emulator.parameter_names
+                ])
+                assert np.allclose(case_row, vv_test_rows[selected_index])
+                vv_selected_records.append({
+                    "difficulty": difficulty_label,
+                    "case_id": selected_id,
+                    "Vv [MeV]": float(vv_test_rows[selected_index, 0]),
+                    "LS relative L2": float(vv_case_errors[selected_index, 0]),
+                    "LROM relative L2": float(vv_case_errors[selected_index, 1]),
+                    "ROSE relative L2": float(vv_case_errors[selected_index, 2]),
+                })
+            display(pd.DataFrame(vv_selected_records).set_index("difficulty"))
+
+            # Each column now compares the same physical case across all methods.
+            fig, axes = plt.subplots(2, 3, figsize=(14.0, 7.0), sharex="col")
+            for column, (difficulty_label, selected_index, selected_id) in enumerate(
+                zip(vv_difficulty_labels, vv_selected_indices, vv_selected_ids)
+            ):
+                vv_case = vv_emulator.testing_case(case_id=selected_id)
+                axes[0, column].plot(
+                    vv_case.radius,
+                    np.real(vv_case.high_fidelity[0]),
+                    color="black",
+                    label="high fidelity",
+                )
+                axes[0, column].plot(
+                    vv_case.radius,
+                    np.real(vv_ls_wavefunctions[selected_index]),
+                    "-.",
+                    color=METHOD_COLORS["ls"],
+                    label="LS",
+                )
+                axes[0, column].plot(
+                    vv_case.radius,
+                    np.real(vv_case.lrom[0]),
+                    ":",
+                    color=METHOD_COLORS["lrom"],
+                    linewidth=2,
+                    label="LROM",
+                )
+                axes[0, column].plot(
+                    vv_case.radius,
+                    np.real(vv_rose_wavefunctions[selected_index]),
+                    "--",
+                    color=METHOD_COLORS["rose"],
+                    label="ROSE",
+                )
+                axes[0, column].set(
+                    ylabel="Re(phi)",
+                    title=(
+                        f"{difficulty_label} difficulty: {selected_id}\\n"
+                        f"Vv = {vv_test_rows[selected_index, 0]:.3f} MeV"
+                    ),
+                )
+                axes[1, column].plot(
+                    vv_case.radius,
+                    np.maximum(
+                        np.abs(
+                            vv_case.high_fidelity[0]
+                            - vv_ls_wavefunctions[selected_index]
+                        ),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["ls"],
+                    label="LS",
+                )
+                axes[1, column].plot(
+                    vv_case.radius,
+                    np.maximum(
+                        np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["lrom"],
+                    label="LROM",
+                )
+                axes[1, column].plot(
+                    vv_case.radius,
+                    np.maximum(
+                        np.abs(
+                            vv_case.high_fidelity[0]
+                            - vv_rose_wavefunctions[selected_index]
+                        ),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["rose"],
+                    label="ROSE",
+                )
+                axes[1, column].set_yscale("log")
+                axes[1, column].set(
+                    xlabel="r [fm]",
+                    ylabel="absolute difference",
+                )
+            axes[0, 0].legend(fontsize=8)
+            axes[1, 0].legend(fontsize=8)
             fig.tight_layout()
             plt.show()
             """
@@ -787,33 +926,186 @@ def notebook_cells() -> list:
             """
             ## Section 3. Three-Parameter Wavefunction Emulation Results
 
-            We now inspect one representative testing solution and compare the
-            training and testing relative-error distributions. The least-squares
-            curve is the attainable floor for this fixed basis.
+            The same method-neutral selection rule now chooses three ws_3 cases.
+            Distance from the central point is computed after scaling each active
+            parameter by its testing half-range, so Vv, Rv, and av contribute in
+            comparable units. The least-squares curve remains the attainable floor
+            for the fixed LROM basis.
             """
         ),
         code(
             """
-            lrom_relative = ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
-            representative_index = int(np.argsort(lrom_relative)[len(lrom_relative) // 2])
-            representative_id = ws3_emulator.samples.design.testing.case_ids[representative_index]
-            case = ws3_emulator.testing_case(case_id=representative_id)
+            # Assemble aligned testing errors, one row per physical parameter row.
+            ws3_case_errors = np.column_stack((
+                ws3_ls_rel_test,
+                np.asarray(
+                    ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
+                ),
+                ws3_rose_rel_test,
+            ))
 
-            fig, axes = plt.subplots(2, 1, figsize=(7.2, 6.2), sharex=True)
-            axes[0].plot(case.radius, np.real(case.high_fidelity[0]), color="black", label="high fidelity")
-            axes[0].plot(case.radius, np.real(ws3_ls_wf_test[representative_index]), "-.", color="blue", label="LS")
-            axes[0].plot(case.radius, np.real(case.lrom[0]), ":", color=METHOD_COLORS["lrom"], linewidth=2, label="LROM")
-            axes[0].plot(case.radius, np.real(ws3_rose_wf_test[representative_index]), "--", color="red", label="ROSE")
-            axes[0].set_ylabel("Re(phi)")
-            axes[0].set_title(f"Representative l=0 testing solution: {representative_id}")
-            axes[0].legend()
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_ls_wf_test[representative_index]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), DISPLAY_ERROR_FLOOR), color=METHOD_COLORS["lrom"], label="LROM")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
-            axes[1].set_yscale("log")
-            axes[1].set_xlabel("r [fm]")
-            axes[1].set_ylabel("absolute difference")
-            axes[1].legend()
+            # Normalize each coordinate by its testing half-range before measuring
+            # distance from the central physical point.
+            ws3_testing_half_ranges = np.asarray([
+                0.5 * (ws3_testing_ranges[name][1] - ws3_testing_ranges[name][0])
+                for name in ws3_emulator.parameter_names
+            ])
+            ws3_normalized_distance = np.linalg.norm(
+                (ws3_test_rows - ws3_center_row) / ws3_testing_half_ranges,
+                axis=1,
+            )
+            ws3_training_overlap = np.any(
+                np.all(
+                    np.isclose(
+                        ws3_test_rows[:, None, :],
+                        ws3_train_rows[None, :, :],
+                        rtol=0.0,
+                        atol=1e-12,
+                    ),
+                    axis=2,
+                ),
+                axis=1,
+            )
+            ws3_candidate_indices = np.flatnonzero(
+                (ws3_normalized_distance >= 0.25) & ~ws3_training_overlap
+            )
+            assert len(ws3_candidate_indices) >= 3
+
+            # Rank the eligible errors method by method, then average those ranks.
+            ws3_candidate_errors = ws3_case_errors[ws3_candidate_indices]
+            ws3_method_ranks = np.empty_like(ws3_candidate_errors, dtype=float)
+            for method_index in range(ws3_candidate_errors.shape[1]):
+                method_order = np.argsort(
+                    ws3_candidate_errors[:, method_index], kind="stable"
+                )
+                ws3_method_ranks[method_order, method_index] = np.arange(
+                    len(ws3_candidate_indices)
+                )
+            ws3_combined_rank = ws3_method_ranks.mean(axis=1)
+            ws3_difficulty_order = ws3_candidate_indices[
+                np.argsort(ws3_combined_rank, kind="stable")
+            ]
+            ws3_difficulty_quantiles = np.array([0.25, 0.50, 0.75])
+            ws3_selected_positions = np.rint(
+                ws3_difficulty_quantiles * (len(ws3_difficulty_order) - 1)
+            ).astype(int)
+            ws3_selected_indices = ws3_difficulty_order[ws3_selected_positions]
+            assert len(np.unique(ws3_selected_indices)) == 3
+            assert np.all(ws3_normalized_distance[ws3_selected_indices] >= 0.25)
+            assert not np.any(ws3_training_overlap[ws3_selected_indices])
+
+            # Check row identity explicitly before plotting the three matched cases.
+            ws3_selected_ids = np.asarray(
+                ws3_emulator.samples.design.testing.case_ids
+            )[ws3_selected_indices]
+            ws3_difficulty_labels = ("lower", "median", "upper")
+            ws3_selected_records = []
+            for difficulty_label, selected_index, selected_id in zip(
+                ws3_difficulty_labels, ws3_selected_indices, ws3_selected_ids
+            ):
+                ws3_case = ws3_emulator.testing_case(case_id=selected_id)
+                case_row = np.asarray([
+                    ws3_case.parameters[name] for name in ws3_emulator.parameter_names
+                ])
+                assert np.allclose(case_row, ws3_test_rows[selected_index])
+                ws3_selected_records.append({
+                    "difficulty": difficulty_label,
+                    "case_id": selected_id,
+                    "Vv [MeV]": float(ws3_test_rows[selected_index, 0]),
+                    "Rv [fm]": float(ws3_test_rows[selected_index, 1]),
+                    "av [fm]": float(ws3_test_rows[selected_index, 2]),
+                    "LS relative L2": float(ws3_case_errors[selected_index, 0]),
+                    "LROM relative L2": float(ws3_case_errors[selected_index, 1]),
+                    "ROSE relative L2": float(ws3_case_errors[selected_index, 2]),
+                })
+            display(pd.DataFrame(ws3_selected_records).set_index("difficulty"))
+
+            fig, axes = plt.subplots(2, 3, figsize=(14.0, 7.0), sharex="col")
+            for column, (difficulty_label, selected_index, selected_id) in enumerate(
+                zip(ws3_difficulty_labels, ws3_selected_indices, ws3_selected_ids)
+            ):
+                ws3_case = ws3_emulator.testing_case(case_id=selected_id)
+                axes[0, column].plot(
+                    ws3_case.radius,
+                    np.real(ws3_case.high_fidelity[0]),
+                    color="black",
+                    label="high fidelity",
+                )
+                axes[0, column].plot(
+                    ws3_case.radius,
+                    np.real(ws3_ls_wf_test[selected_index]),
+                    "-.",
+                    color=METHOD_COLORS["ls"],
+                    label="LS",
+                )
+                axes[0, column].plot(
+                    ws3_case.radius,
+                    np.real(ws3_case.lrom[0]),
+                    ":",
+                    color=METHOD_COLORS["lrom"],
+                    linewidth=2,
+                    label="LROM",
+                )
+                axes[0, column].plot(
+                    ws3_case.radius,
+                    np.real(ws3_rose_wf_test[selected_index]),
+                    "--",
+                    color=METHOD_COLORS["rose"],
+                    label="ROSE",
+                )
+                parameter_text = ", ".join(
+                    f"{name}={value:.3f}"
+                    for name, value in zip(
+                        ws3_emulator.parameter_names, ws3_test_rows[selected_index]
+                    )
+                )
+                axes[0, column].set(
+                    ylabel="Re(phi)",
+                    title=(
+                        f"{difficulty_label} difficulty: {selected_id}\\n"
+                        f"{parameter_text}"
+                    ),
+                )
+                axes[1, column].plot(
+                    ws3_case.radius,
+                    np.maximum(
+                        np.abs(
+                            ws3_case.high_fidelity[0]
+                            - ws3_ls_wf_test[selected_index]
+                        ),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["ls"],
+                    label="LS",
+                )
+                axes[1, column].plot(
+                    ws3_case.radius,
+                    np.maximum(
+                        np.abs(ws3_case.high_fidelity[0] - ws3_case.lrom[0]),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["lrom"],
+                    label="LROM",
+                )
+                axes[1, column].plot(
+                    ws3_case.radius,
+                    np.maximum(
+                        np.abs(
+                            ws3_case.high_fidelity[0]
+                            - ws3_rose_wf_test[selected_index]
+                        ),
+                        DISPLAY_ERROR_FLOOR,
+                    ),
+                    color=METHOD_COLORS["rose"],
+                    label="ROSE",
+                )
+                axes[1, column].set_yscale("log")
+                axes[1, column].set(
+                    xlabel="r [fm]",
+                    ylabel="absolute difference",
+                )
+            axes[0, 0].legend(fontsize=8)
+            axes[1, 0].legend(fontsize=8)
             fig.tight_layout()
             plt.show()
             """
@@ -908,7 +1200,10 @@ def notebook_cells() -> list:
             artifact_path = ROOT / "outputs" / "notebook01_ws3_model.lrom"
             ws3_emulator.save(path=artifact_path)
             portable_emulator = lrom.load(path=artifact_path)
-            portable_emulator.predict(parameters=case.parameters)
+            ws3_export_case = ws3_emulator.testing_case(
+                case_id=ws3_selected_ids[1]
+            )
+            portable_emulator.predict(parameters=ws3_export_case.parameters)
             print("portable model:", artifact_path)
             print("prediction shape:", portable_emulator.predictions.wavefunctions[0].shape)
             """

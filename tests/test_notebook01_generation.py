@@ -16,6 +16,12 @@ def notebook_source() -> str:
     )
 
 
+def test_notebook01_all_generated_code_cells_compile() -> None:
+    for cell_index, cell in enumerate(generate_notebook01.notebook_cells()):
+        if cell["cell_type"] == "code":
+            compile(cell["source"], f"notebook01-cell-{cell_index}", "exec")
+
+
 def test_notebook01_bootstrap_finds_public_v1_2_package() -> None:
     script = f"""
 from pathlib import Path
