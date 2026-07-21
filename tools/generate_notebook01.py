@@ -282,97 +282,38 @@ def notebook_cells() -> list:
         ),
         md(
             """
-            The next figures show each method's basis beside its singular-value
-            decay, followed by coefficient trends. The spectra show whether four
-            retained vectors are consistent with the snapshot compression.
+            The next figure places the LROM central-reference basis beside the ROSE
+            free-reference basis. Their coordinates use different reference
+            functions, so the basis labels remain distinct.
             """
         ),
         code(
             """
             basis = vv_emulator.basis[0]
-            vv_lrom_centered_snapshots = (
-                vv_emulator.samples.training_wavefunctions[0]
-                - vv_emulator.samples.central_wavefunctions[0][None, :]
-            )
-            vv_lrom_singular_values = np.linalg.svd(
-                vv_lrom_centered_snapshots, compute_uv=False
-            )
             fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
-            for index in range(BASIS_SIZE):
+            for coordinate_index in range(BASIS_SIZE):
                 axes[0].plot(
                     r,
-                    np.real(basis.vectors[:, index]),
-                    label=f"basis {index + 1}",
+                    np.real(basis.vectors[:, coordinate_index]),
+                    label=fr"$a_{{{coordinate_index + 1}}}$ basis",
+                )
+                axes[1].plot(
+                    r,
+                    np.real(vv_rose_basis.vectors[:, coordinate_index]),
+                    label=fr"$c_{{{coordinate_index + 1}}}$ basis",
                 )
             axes[0].set(
                 xlabel="r [fm]",
                 ylabel="Re(basis vector)",
                 title="LROM central-reference basis",
             )
-            axes[0].legend()
-            vv_lrom_normalized_singular_values = (
-                vv_lrom_singular_values / vv_lrom_singular_values[0]
-            )
-            vv_lrom_modes = np.arange(1, len(vv_lrom_normalized_singular_values) + 1)
-            axes[1].plot(
-                vv_lrom_modes,
-                vv_lrom_normalized_singular_values,
-                "o-",
-                color="black",
-            )
-            axes[1].axvline(
-                BASIS_SIZE + 0.5,
-                color="gray",
-                linestyle="--",
-                label="retained K = 4",
-            )
-            axes[1].set_yscale("log")
             axes[1].set(
-                xlabel="mode j",
-                ylabel="normalized singular value",
-                title="Central-centered snapshot spectrum",
-            )
-            axes[1].legend()
-            fig.tight_layout()
-            plt.show()
-
-            vv_rose_singular_values = np.asarray(vv_rose_basis.singular_values)
-            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
-            for index in range(BASIS_SIZE):
-                axes[0].plot(
-                    r,
-                    np.real(vv_rose_basis.vectors[:, index]),
-                    label=f"basis {index + 1}",
-                )
-            axes[0].set(
                 xlabel="r [fm]",
                 ylabel="Re(basis vector)",
                 title="ROSE free-reference basis",
             )
-            axes[0].legend()
-            vv_rose_normalized_singular_values = (
-                vv_rose_singular_values / vv_rose_singular_values[0]
-            )
-            vv_rose_modes = np.arange(1, len(vv_rose_normalized_singular_values) + 1)
-            axes[1].plot(
-                vv_rose_modes,
-                vv_rose_normalized_singular_values,
-                "o-",
-                color="black",
-            )
-            axes[1].axvline(
-                BASIS_SIZE + 0.5,
-                color="gray",
-                linestyle="--",
-                label="retained K = 4",
-            )
-            axes[1].set_yscale("log")
-            axes[1].set(
-                xlabel="mode j",
-                ylabel="normalized singular value",
-                title="Free-centered snapshot spectrum",
-            )
-            axes[1].legend()
+            for ax in axes:
+                ax.legend(fontsize=8)
             fig.tight_layout()
             plt.show()
 
@@ -661,43 +602,12 @@ def notebook_cells() -> list:
         ),
         md(
             """
-            The three pairwise panels show that $V_v$, $R_v$, and $a_v$ vary
-            together. In particular, the av variation is visible both as an axis
-            and as a color scale rather than being left implicit in the sample table.
-
-            The error summary then compares raw parameter predictors with the main
+            The error summary compares raw parameter predictors with the main
             potential predictors on the same stored high-fidelity samples.
             """
         ),
         code(
             """
-            ws3_names = ws3_emulator.parameter_names
-            ws3_training_rows = ws3_emulator.samples.design.training.values
-            fig, axes = plt.subplots(1, 3, figsize=(13.2, 3.6))
-            pairings = ((0, 1, 2), (0, 2, 1), (1, 2, 0))
-            for ax, (x_index, y_index, color_index) in zip(axes, pairings):
-                scatter = ax.scatter(
-                    ws3_training_rows[:, x_index],
-                    ws3_training_rows[:, y_index],
-                    c=ws3_training_rows[:, color_index],
-                    cmap="viridis",
-                    s=26,
-                    alpha=0.8,
-                )
-                ax.set(
-                    xlabel=f"{ws3_names[x_index]}",
-                    ylabel=f"{ws3_names[y_index]}",
-                    title=f"colored by {ws3_names[color_index]}",
-                )
-                fig.colorbar(
-                    scatter,
-                    ax=ax,
-                    label=f"{ws3_names[color_index]}",
-                )
-            fig.suptitle("Joint Vv, Rv, and av variation in the training design")
-            fig.tight_layout()
-            plt.show()
-
             potential_relative_l2 = np.asarray(
                 ws3_emulator.testing_results.metrics["relative_l2"][0]["lrom"]
             )
@@ -717,132 +627,70 @@ def notebook_cells() -> list:
         ),
         md(
             """
-            The potential ensemble is compressed separately from the wavefunctions.
-            Red markers identify the six physical radii selected for the potential
-            predictors, and the adjacent spectrum shows the ensemble decay.
+            The selected radii show which local potential values become LROM
+            predictor features. The gray curves are training potentials; the
+            vertical lines are the six physical radii retained by the predictor.
             """
         ),
         code(
             """
             r3 = ws3_emulator.mesh.radius
-            fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
-            for potential in ws3_emulator.samples.training_potentials:
-                axes[0].plot(r3, np.real(potential), color="slateblue", alpha=0.12)
-            axes[0].plot(r3, np.real(ws3_emulator.samples.central_potential), color="black", label="central")
-            selected_radii = ws3_emulator.predictors.selected_radii
-            selected_values = ws3_emulator.samples.central_potential[
-                ws3_emulator.predictors.selected_indices
-            ]
-            axes[0].scatter(
-                selected_radii,
-                np.real(selected_values),
-                color="crimson",
-                zorder=5,
-                label="selected potential predictor points",
+            fig, ax = plt.subplots(figsize=(7.4, 4.0))
+            for potential in ws3_emulator.samples.training_potentials[:20]:
+                ax.plot(r3, np.real(potential), color="0.65", alpha=0.20)
+            for radius_index, selected_radius in enumerate(
+                ws3_emulator.predictors.selected_radii, start=1
+            ):
+                ax.axvline(
+                    selected_radius,
+                    color="purple",
+                    alpha=0.75,
+                    label="potential predictor radii" if radius_index == 1 else None,
+                )
+            ax.set(
+                xlabel="r [fm]",
+                ylabel="V(r) [MeV]",
+                title="Potential samples and selected LROM predictor radii",
             )
-            axes[0].set(xlabel="r [fm]", ylabel="V(r) [MeV]", title="ws_3 potential predictors")
-            axes[0].legend()
-
-            for index, singular_value in enumerate(ws3_emulator.predictors.singular_values[:10], start=1):
-                axes[1].semilogy(index, singular_value, "o", color="slateblue")
-            axes[1].set(xlabel="potential mode", ylabel="singular value", title="Potential-ensemble spectrum")
+            ax.legend()
+            fig.tight_layout()
             plt.show()
             """
         ),
         md(
             """
-            The LROM and ROSE wavefunction bases again appear beside their
-            singular-value spectra. The following coefficient panels replace an
-            arbitrary case index with physical parameters: the horizontal axis is
-            $V_v$, while a second parameter supplies the color scale.
+            The two rank-four bases are shown together before their coordinates.
+            LROM and LS use the central-reference basis; ROSE uses its
+            free-reference basis.
             """
         ),
         code(
             """
             ws3_basis = ws3_emulator.basis[0]
-            ws3_lrom_centered_snapshots = (
-                ws3_emulator.samples.training_wavefunctions[0]
-                - ws3_emulator.samples.central_wavefunctions[0][None, :]
-            )
-            ws3_lrom_singular_values = np.linalg.svd(
-                ws3_lrom_centered_snapshots, compute_uv=False
-            )
             fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
-            for index in range(BASIS_SIZE):
+            for coordinate_index in range(BASIS_SIZE):
                 axes[0].plot(
                     r3,
-                    np.real(ws3_basis.vectors[:, index]),
-                    label=f"basis {index + 1}",
+                    np.real(ws3_basis.vectors[:, coordinate_index]),
+                    label=fr"$a_{{{coordinate_index + 1}}}$ basis",
+                )
+                axes[1].plot(
+                    r3,
+                    np.real(ws3_rose_basis.vectors[:, coordinate_index]),
+                    label=fr"$c_{{{coordinate_index + 1}}}$ basis",
                 )
             axes[0].set(
                 xlabel="r [fm]",
                 ylabel="Re(basis vector)",
-                title="ws_3 LROM central-reference basis",
+                title="LROM central-reference basis",
             )
-            axes[0].legend()
-            ws3_lrom_normalized_singular_values = (
-                ws3_lrom_singular_values / ws3_lrom_singular_values[0]
-            )
-            ws3_lrom_modes = np.arange(1, len(ws3_lrom_normalized_singular_values) + 1)
-            axes[1].plot(
-                ws3_lrom_modes,
-                ws3_lrom_normalized_singular_values,
-                "o-",
-                color="black",
-            )
-            axes[1].axvline(
-                BASIS_SIZE + 0.5,
-                color="gray",
-                linestyle="--",
-                label="retained K = 4",
-            )
-            axes[1].set_yscale("log")
             axes[1].set(
-                xlabel="mode j",
-                ylabel="normalized singular value",
-                title="Central-centered snapshot spectrum",
-            )
-            axes[1].legend()
-            fig.tight_layout()
-            plt.show()
-
-            ws3_rose_singular_values = np.asarray(ws3_rose_basis.singular_values)
-            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
-            for index in range(BASIS_SIZE):
-                axes[0].plot(
-                    r3,
-                    np.real(ws3_rose_basis.vectors[:, index]),
-                    label=f"basis {index + 1}",
-                )
-            axes[0].set(
                 xlabel="r [fm]",
                 ylabel="Re(basis vector)",
-                title="ws_3 ROSE free-reference basis",
+                title="ROSE free-reference basis",
             )
-            axes[0].legend()
-            ws3_rose_normalized_singular_values = (
-                ws3_rose_singular_values / ws3_rose_singular_values[0]
-            )
-            ws3_rose_modes = np.arange(1, len(ws3_rose_normalized_singular_values) + 1)
-            axes[1].plot(
-                ws3_rose_modes,
-                ws3_rose_normalized_singular_values,
-                "o-",
-                color="black",
-            )
-            axes[1].axvline(
-                BASIS_SIZE + 0.5,
-                color="gray",
-                linestyle="--",
-                label="retained K = 4",
-            )
-            axes[1].set_yscale("log")
-            axes[1].set(
-                xlabel="mode j",
-                ylabel="normalized singular value",
-                title="Free-centered snapshot spectrum",
-            )
-            axes[1].legend()
+            for ax in axes:
+                ax.legend(fontsize=8)
             fig.tight_layout()
             plt.show()
 

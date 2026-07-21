@@ -76,13 +76,13 @@ def test_notebook01_preserves_the_project_map_figures_and_methods() -> None:
         "High-fidelity training solutions",
         "LROM central-reference basis",
         "ROSE free-reference basis",
-        "potential predictors",
-        '("ls", "blue")',
-        '("lrom", "orange")',
-        '("rose", "red")',
+        "potential predictor radii",
     ):
         assert phrase in source
-    assert source.count("normalized singular value") >= 4
+    assert "normalized singular value" not in source
+    assert "snapshot spectrum" not in source.lower()
+    assert "Potential-ensemble spectrum" not in source
+    assert "joint parameter variation" not in source.lower()
     assert "def plot_" not in source
 
 

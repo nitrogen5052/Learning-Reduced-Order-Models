@@ -39,7 +39,7 @@ def test_notebook01_plots_required_physical_diagnostics_explicitly() -> None:
     text = source()
 
     assert "selected_radii" in text
-    assert "selected potential predictor points" in text.lower()
+    assert "potential predictor radii" in text.lower()
     assert "np.real(case.high_fidelity[0])" in text
     assert "np.real(ws3_rose_wf_test[representative_index])" in text
     assert "np.real(case.lrom[0])" in text
@@ -124,10 +124,9 @@ def test_ws3_coefficients_are_separate_and_wavefunctions_keep_absolute_differenc
     assert "np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index])" in text
 
 
-def test_ws3_restores_raw_parameter_and_colored_coefficient_diagnostics() -> None:
+def test_ws3_keeps_raw_parameter_and_colored_coefficient_diagnostics() -> None:
     text = source()
 
-    assert "av variation" in text
     assert "raw parameter predictors" in text
     assert "potential predictors" in text
     assert "colored by" in text
@@ -195,16 +194,26 @@ def test_notebook01_preserves_the_users_explanatory_intent() -> None:
     assert "optional LS floor" in text
 
 
-def test_notebook01_pairs_each_basis_with_its_singular_spectrum() -> None:
+def test_notebook01_uses_compact_paired_basis_figures() -> None:
     text = source()
 
-    assert "vv_lrom_singular_values = np.linalg.svd(" in text
-    assert "ws3_lrom_singular_values = np.linalg.svd(" in text
-    assert "vv_rose_basis.singular_values" in text
-    assert "ws3_rose_basis.singular_values" in text
-    assert text.count('set_yscale("log")') >= 4
-    assert text.count("BASIS_SIZE + 0.5") >= 4
-    assert text.count("normalized singular value") >= 4
+    assert "vv_lrom_singular_values" not in text
+    assert "ws3_lrom_singular_values" not in text
+    assert ".singular_values" not in text
+    assert "normalized singular value" not in text
+    assert text.count('fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))') >= 2
+    assert "LROM central-reference basis" in text
+    assert "ROSE free-reference basis" in text
+
+
+def test_notebook01_removes_the_standalone_joint_variation_figure() -> None:
+    text = source()
+
+    assert "from itertools import combinations" not in text
+    assert "joint parameter variation" not in text.lower()
+    assert "Joint Vv, Rv, and av variation" not in text
+    assert "pairings =" not in text
+    assert "parameter-pair" not in text.lower()
 
 
 def test_notebook01_uses_display_floor_and_omits_only_central_plot_point() -> None:
