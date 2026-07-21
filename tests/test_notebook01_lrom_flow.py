@@ -170,15 +170,29 @@ def test_notebook01_declares_equal_rank_but_separate_coordinate_conventions() ->
     assert "shared-basis" not in text.lower()
 
 
-def test_notebook01_reports_corrected_rose_outliers_by_named_case() -> None:
+def test_notebook01_rose_blocks_show_only_the_four_required_stages() -> None:
     text = source()
 
-    assert "ws3_rose_coefficient_norm" in text
-    assert "ws3_rose_worst_indices" in text
-    assert "worst corrected ROSE cases" in text
-    assert "case_id" in text
-    assert "coefficient infinity norm" in text
-    assert "relative L2 error" in text
+    for phrase in (
+        "Assemble the FOM parameter rows used to bound the ROSE EIM",
+        "Initialize the notebook-owned EIM interaction",
+        "Produce ROSE's free solution and reduced basis",
+        "Evaluate ROSE on the same ordered parameter rows",
+    ):
+        assert text.count(phrase) == 2
+    assert "worst corrected ROSE cases" not in text
+    assert "ws3_rose_coefficient_norm" not in text
+    assert "ws3_rose_worst_indices" not in text
+
+
+def test_notebook01_preserves_the_users_explanatory_intent() -> None:
+    text = source()
+
+    assert "FOM parameter rows" in text
+    assert "EIM interaction" in text
+    assert "free solution" in text
+    assert "reduced basis" in text
+    assert "optional LS floor" in text
 
 
 def test_notebook01_pairs_each_basis_with_its_singular_spectrum() -> None:

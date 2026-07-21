@@ -190,8 +190,7 @@ def notebook_cells() -> list:
             print("training wavefunctions:", vv_emulator.samples.training_wavefunctions[0].shape)
             print("testing wavefunctions:", vv_emulator.samples.testing_wavefunctions[0].shape)
 
-            # Following the ROSE tutorial, this notebook owns the EIM used only
-            # by the ROSE reduced equations. Package FOM sampling remains exact.
+            # 1. Assemble the FOM parameter rows used to bound the ROSE EIM.
             vv_central_row = np.asarray(
                 [vv_center[name] for name in vv_emulator.parameter_names]
             )
@@ -204,6 +203,8 @@ def notebook_cells() -> list:
                 vv_rose_rows.min(axis=0),
                 vv_rose_rows.max(axis=0),
             ])
+
+            # 2. Initialize the notebook-owned EIM interaction.
             vv_rose_interactions = rose.InteractionEIMSpace(
                 l_max=0,
                 coordinate_space_potential=rose_real_woods_saxon,
@@ -217,8 +218,7 @@ def notebook_cells() -> list:
             )
             vv_rose_interaction = vv_rose_interactions.interactions[0][0]
 
-            # ROSE uses its free-solution reference and builds its own four-vector basis
-            # from the same high-fidelity training snapshots used by LROM.
+            # 3. Produce ROSE's free solution and reduced basis.
             vv_rose_phi0 = np.asarray([
                 rose.free_solutions.phi_free(float(rho), 0, vv_emulator.kinematics.eta)
                 for rho in vv_emulator.samples.mesh.rho
@@ -240,6 +240,8 @@ def notebook_cells() -> list:
                 s_0=vv_emulator.full_order_model[0].base_solver.s_0,
                 initialize_emulator=True,
             )
+
+            # 4. Evaluate ROSE on the same ordered parameter rows as LS and LROM.
             vv_test_rows = vv_emulator.samples.design.testing.values
             vv_rose_coefficients = np.asarray([vv_rose_rbe.coefficients(row) for row in vv_test_rows])
             vv_rose_wavefunctions = np.asarray([vv_rose_rbe.emulate_wave_function(row) for row in vv_test_rows])
@@ -575,7 +577,7 @@ def notebook_cells() -> list:
                 predictor_count=6,
             )
 
-            # Compute the optional LS basis floor explicitly for both sampled sets.
+            # Compute the optional LS floor explicitly for both sample sets.
             ws3_fom_train = ws3_emulator.samples.training_wavefunctions[0]
             ws3_fom_test = ws3_emulator.samples.testing_wavefunctions[0]
             ws3_ls_train_coefficients, ws3_ls_wf_train = lrom.least_squares_baseline(
@@ -595,8 +597,7 @@ def notebook_cells() -> list:
                 reference=ws3_fom_test,
             )
 
-            # The ws_3 ROSE comparison owns a separate non-affine EIM over the
-            # central, training, and wider testing parameter region.
+            # 1. Assemble the FOM parameter rows used to bound the ROSE EIM.
             ws3_central_row = np.asarray(
                 [ws3_center[name] for name in ws3_emulator.parameter_names]
             )
@@ -609,6 +610,8 @@ def notebook_cells() -> list:
                 ws3_rose_rows.min(axis=0),
                 ws3_rose_rows.max(axis=0),
             ])
+
+            # 2. Initialize the notebook-owned EIM interaction.
             ws3_rose_interactions = rose.InteractionEIMSpace(
                 l_max=0,
                 coordinate_space_potential=rose_real_woods_saxon,
@@ -622,7 +625,7 @@ def notebook_cells() -> list:
             )
             ws3_rose_interaction = ws3_rose_interactions.interactions[0][0]
 
-            # The ws_3 ROSE emulator uses the same free-reference construction.
+            # 3. Produce ROSE's free solution and reduced basis.
             ws3_rose_phi0 = np.asarray([
                 rose.free_solutions.phi_free(float(rho), 0, ws3_emulator.kinematics.eta)
                 for rho in ws3_emulator.samples.mesh.rho
@@ -644,6 +647,8 @@ def notebook_cells() -> list:
                 s_0=ws3_emulator.full_order_model[0].base_solver.s_0,
                 initialize_emulator=True,
             )
+
+            # 4. Evaluate ROSE on the same ordered parameter rows as LS and LROM.
             ws3_train_rows = ws3_emulator.samples.design.training.values
             ws3_test_rows = ws3_emulator.samples.design.testing.values
             ws3_rose_coefficients = np.asarray([ws3_rose_rbe.coefficients(row) for row in ws3_test_rows])
@@ -651,16 +656,6 @@ def notebook_cells() -> list:
             ws3_rose_wf_test = np.asarray([ws3_rose_rbe.emulate_wave_function(row) for row in ws3_test_rows])
             ws3_rose_rel_train = np.linalg.norm(ws3_rose_wf_train - ws3_fom_train, axis=1) / np.linalg.norm(ws3_fom_train, axis=1)
             ws3_rose_rel_test = np.linalg.norm(ws3_rose_wf_test - ws3_fom_test, axis=1) / np.linalg.norm(ws3_fom_test, axis=1)
-            ws3_rose_coefficient_norm = np.linalg.norm(ws3_rose_coefficients, ord=np.inf, axis=1)
-            ws3_rose_worst_indices = np.argsort(ws3_rose_coefficient_norm)[-3:][::-1]
-            print("worst corrected ROSE cases")
-            for index in ws3_rose_worst_indices:
-                print({
-                    "case_id": ws3_emulator.samples.design.testing.case_ids[index],
-                    "parameters": ws3_emulator.samples.design.testing.named(index=index),
-                    "coefficient infinity norm": float(ws3_rose_coefficient_norm[index]),
-                    "relative L2 error": float(ws3_rose_rel_test[index]),
-                })
             print("potential predictor radii [fm]:", ws3_emulator.predictors.selected_radii)
             """
         ),
