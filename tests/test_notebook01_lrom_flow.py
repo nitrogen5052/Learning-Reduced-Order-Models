@@ -67,8 +67,8 @@ def test_vv_coefficients_use_separate_lrom_and_rose_coordinate_figures() -> None
 
     assert "for coefficient_index in range(2)" in text
     assert 'for method, color in (("ls", "blue"), ("lrom", "orange"))' in text
-    assert "coefficients[method][0][:, coefficient_index]" in text
-    assert "vv_rose_coefficients[:, coefficient_index]" in text
+    assert "coefficients[method][0][vv_plot_mask, coefficient_index]" in text
+    assert "vv_rose_coefficients[vv_plot_mask, coefficient_index]" in text
     assert ".scatter(" in text
     assert "ax.axvspan(vv_test.min(), vv_train_low" in text
     assert "ax.axvspan(vv_train_high, vv_test.max()" in text
@@ -133,6 +133,28 @@ def test_notebook01_reports_corrected_rose_outliers_by_named_case() -> None:
     assert "case_id" in text
     assert "coefficient infinity norm" in text
     assert "relative L2 error" in text
+
+
+def test_notebook01_pairs_each_basis_with_its_singular_spectrum() -> None:
+    text = source()
+
+    assert "vv_lrom_singular_values = np.linalg.svd(" in text
+    assert "ws3_lrom_singular_values = np.linalg.svd(" in text
+    assert "vv_rose_basis.singular_values" in text
+    assert "ws3_rose_basis.singular_values" in text
+    assert text.count('set_yscale("log")') >= 4
+    assert text.count("BASIS_SIZE + 0.5") >= 4
+    assert text.count("normalized singular value") >= 4
+
+
+def test_notebook01_uses_display_floor_and_omits_only_central_plot_point() -> None:
+    text = source()
+
+    assert "DISPLAY_ERROR_FLOOR = 1e-11" in text
+    assert "vv_plot_mask = ~np.isclose(vv_test, Vv0" in text
+    assert "vv_fom_test" in text
+    assert "np.log10(" not in text
+    assert 'set_yscale("log")' in text
 
 
 def test_ws3_final_figure_is_relative_l2_violin_comparison() -> None:

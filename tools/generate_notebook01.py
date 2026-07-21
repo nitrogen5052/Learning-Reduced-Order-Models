@@ -56,6 +56,7 @@ def notebook_cells() -> list:
             "import sys",
             "",
             "import matplotlib.pyplot as plt",
+            "from matplotlib.lines import Line2D",
             "from matplotlib.patches import Patch",
             "import numpy as np",
             "import pandas as pd",
@@ -220,14 +221,94 @@ def notebook_cells() -> list:
         code(
             """
             basis = vv_emulator.basis[0]
-            fig, ax = plt.subplots(figsize=(7.2, 3.8))
-            for index in range(basis.basis_size):
-                ax.plot(r, np.real(basis.vectors[:, index]), label=f"basis {index + 1}")
-            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="LROM central-reference basis")
-            ax.legend()
+            vv_lrom_centered_snapshots = (
+                vv_emulator.samples.training_wavefunctions[0]
+                - vv_emulator.samples.central_wavefunctions[0][None, :]
+            )
+            vv_lrom_singular_values = np.linalg.svd(
+                vv_lrom_centered_snapshots, compute_uv=False
+            )
+            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
+            for index in range(BASIS_SIZE):
+                axes[0].plot(
+                    r,
+                    np.real(basis.vectors[:, index]),
+                    label=f"basis {index + 1}",
+                )
+            axes[0].set(
+                xlabel="r [fm]",
+                ylabel="Re(basis vector)",
+                title="LROM central-reference basis",
+            )
+            axes[0].legend()
+            vv_lrom_normalized_singular_values = (
+                vv_lrom_singular_values / vv_lrom_singular_values[0]
+            )
+            vv_lrom_modes = np.arange(1, len(vv_lrom_normalized_singular_values) + 1)
+            axes[1].plot(
+                vv_lrom_modes,
+                vv_lrom_normalized_singular_values,
+                "o-",
+                color="black",
+            )
+            axes[1].axvline(
+                BASIS_SIZE + 0.5,
+                color="gray",
+                linestyle="--",
+                label="retained K = 4",
+            )
+            axes[1].set_yscale("log")
+            axes[1].set(
+                xlabel="mode j",
+                ylabel="normalized singular value",
+                title="Central-centered snapshot spectrum",
+            )
+            axes[1].legend()
+            fig.tight_layout()
+            plt.show()
+
+            vv_rose_singular_values = np.asarray(vv_rose_basis.singular_values)
+            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
+            for index in range(BASIS_SIZE):
+                axes[0].plot(
+                    r,
+                    np.real(vv_rose_basis.vectors[:, index]),
+                    label=f"basis {index + 1}",
+                )
+            axes[0].set(
+                xlabel="r [fm]",
+                ylabel="Re(basis vector)",
+                title="ROSE free-reference basis",
+            )
+            axes[0].legend()
+            vv_rose_normalized_singular_values = (
+                vv_rose_singular_values / vv_rose_singular_values[0]
+            )
+            vv_rose_modes = np.arange(1, len(vv_rose_normalized_singular_values) + 1)
+            axes[1].plot(
+                vv_rose_modes,
+                vv_rose_normalized_singular_values,
+                "o-",
+                color="black",
+            )
+            axes[1].axvline(
+                BASIS_SIZE + 0.5,
+                color="gray",
+                linestyle="--",
+                label="retained K = 4",
+            )
+            axes[1].set_yscale("log")
+            axes[1].set(
+                xlabel="mode j",
+                ylabel="normalized singular value",
+                title="Free-centered snapshot spectrum",
+            )
+            axes[1].legend()
+            fig.tight_layout()
             plt.show()
 
             vv_test = vv_emulator.samples.design.testing.values[:, 0]
+            vv_plot_mask = ~np.isclose(vv_test, Vv0, rtol=0.0, atol=1e-12)
             coefficients = {key: dict(value) for key, value in vv_emulator.testing_results.coefficients.items()}
             vv_train_low, vv_train_high = vv_training_ranges["Vv"]
             fig, axes = plt.subplots(2, 2, figsize=(11.0, 6.2), sharex="col")
@@ -236,8 +317,8 @@ def notebook_cells() -> list:
                 difference_ax = axes[1, coefficient_index]
                 for method, color in (("ls", "blue"), ("lrom", "orange")):
                     ax.scatter(
-                        vv_test,
-                        np.real(coefficients[method][0][:, coefficient_index]),
+                        vv_test[vv_plot_mask],
+                        np.real(coefficients[method][0][vv_plot_mask, coefficient_index]),
                         s=22,
                         color=color,
                         alpha=0.75,
@@ -250,8 +331,11 @@ def notebook_cells() -> list:
                 ls_coefficients = np.real(coefficients["ls"][0][:, coefficient_index])
                 lrom_coefficients = np.real(coefficients["lrom"][0][:, coefficient_index])
                 difference_ax.scatter(
-                    vv_test,
-                    np.maximum(np.abs(ls_coefficients - lrom_coefficients), DISPLAY_ERROR_FLOOR),
+                    vv_test[vv_plot_mask],
+                    np.maximum(
+                        np.abs(ls_coefficients - lrom_coefficients)[vv_plot_mask],
+                        DISPLAY_ERROR_FLOOR,
+                    ),
                     s=20,
                     color="orange",
                     alpha=0.75,
@@ -271,8 +355,8 @@ def notebook_cells() -> list:
             fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8), sharex=True)
             for coefficient_index, ax in enumerate(axes):
                 ax.scatter(
-                    vv_test,
-                    np.real(vv_rose_coefficients[:, coefficient_index]),
+                    vv_test[vv_plot_mask],
+                    np.real(vv_rose_coefficients[vv_plot_mask, coefficient_index]),
                     s=22,
                     color="red",
                     alpha=0.75,
@@ -306,9 +390,9 @@ def notebook_cells() -> list:
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"40Ca(n,n), l=0 central Vv testing solution: {vv_representative_id}")
             axes[0].legend()
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.ls[0]), 1e-16), color="blue", label="LS")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), 1e-16), color="orange", label="LROM")
-            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index]), 1e-16), color="red", label="ROSE")
+            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.ls[0]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
+            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_case.lrom[0]), DISPLAY_ERROR_FLOOR), color="orange", label="LROM")
+            axes[1].plot(vv_case.radius, np.maximum(np.abs(vv_case.high_fidelity[0] - vv_rose_wavefunctions[vv_representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
             axes[1].set_ylabel("absolute difference")
@@ -323,8 +407,8 @@ def notebook_cells() -> list:
             vv_errors["rose"] = np.abs(vv_rose_wavefunctions - vv_fom_test)
             fig, ax = plt.subplots(figsize=(7.2, 4.0))
             for method, color in (("rose", "red"), ("lrom", "orange"), ("ls", "blue")):
-                for error in vv_errors[method]:
-                    ax.plot(r, np.maximum(error, 1e-14), color=color, alpha=0.16)
+                for error in vv_errors[method][vv_plot_mask]:
+                    ax.plot(r, np.maximum(error, DISPLAY_ERROR_FLOOR), color=color, alpha=0.16)
             ax.set_yscale("log")
             ax.set_xlabel("r [fm]")
             ax.set_ylabel("absolute difference")
@@ -458,11 +542,90 @@ def notebook_cells() -> list:
         code(
             """
             ws3_basis = ws3_emulator.basis[0]
-            fig, ax = plt.subplots(figsize=(7.2, 3.8))
-            for index in range(ws3_basis.basis_size):
-                ax.plot(r3, np.real(ws3_basis.vectors[:, index]), label=f"basis {index + 1}")
-            ax.set(xlabel="r [fm]", ylabel="Re(basis vector)", title="ws_3 LROM central-reference basis")
-            ax.legend()
+            ws3_lrom_centered_snapshots = (
+                ws3_emulator.samples.training_wavefunctions[0]
+                - ws3_emulator.samples.central_wavefunctions[0][None, :]
+            )
+            ws3_lrom_singular_values = np.linalg.svd(
+                ws3_lrom_centered_snapshots, compute_uv=False
+            )
+            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
+            for index in range(BASIS_SIZE):
+                axes[0].plot(
+                    r3,
+                    np.real(ws3_basis.vectors[:, index]),
+                    label=f"basis {index + 1}",
+                )
+            axes[0].set(
+                xlabel="r [fm]",
+                ylabel="Re(basis vector)",
+                title="ws_3 LROM central-reference basis",
+            )
+            axes[0].legend()
+            ws3_lrom_normalized_singular_values = (
+                ws3_lrom_singular_values / ws3_lrom_singular_values[0]
+            )
+            ws3_lrom_modes = np.arange(1, len(ws3_lrom_normalized_singular_values) + 1)
+            axes[1].plot(
+                ws3_lrom_modes,
+                ws3_lrom_normalized_singular_values,
+                "o-",
+                color="black",
+            )
+            axes[1].axvline(
+                BASIS_SIZE + 0.5,
+                color="gray",
+                linestyle="--",
+                label="retained K = 4",
+            )
+            axes[1].set_yscale("log")
+            axes[1].set(
+                xlabel="mode j",
+                ylabel="normalized singular value",
+                title="Central-centered snapshot spectrum",
+            )
+            axes[1].legend()
+            fig.tight_layout()
+            plt.show()
+
+            ws3_rose_singular_values = np.asarray(ws3_rose_basis.singular_values)
+            fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.8))
+            for index in range(BASIS_SIZE):
+                axes[0].plot(
+                    r3,
+                    np.real(ws3_rose_basis.vectors[:, index]),
+                    label=f"basis {index + 1}",
+                )
+            axes[0].set(
+                xlabel="r [fm]",
+                ylabel="Re(basis vector)",
+                title="ws_3 ROSE free-reference basis",
+            )
+            axes[0].legend()
+            ws3_rose_normalized_singular_values = (
+                ws3_rose_singular_values / ws3_rose_singular_values[0]
+            )
+            ws3_rose_modes = np.arange(1, len(ws3_rose_normalized_singular_values) + 1)
+            axes[1].plot(
+                ws3_rose_modes,
+                ws3_rose_normalized_singular_values,
+                "o-",
+                color="black",
+            )
+            axes[1].axvline(
+                BASIS_SIZE + 0.5,
+                color="gray",
+                linestyle="--",
+                label="retained K = 4",
+            )
+            axes[1].set_yscale("log")
+            axes[1].set(
+                xlabel="mode j",
+                ylabel="normalized singular value",
+                title="Free-centered snapshot spectrum",
+            )
+            axes[1].legend()
+            fig.tight_layout()
             plt.show()
 
             coefficients = {key: dict(value) for key, value in ws3_emulator.testing_results.coefficients.items()}
@@ -541,9 +704,9 @@ def notebook_cells() -> list:
             axes[0].set_ylabel("Re(phi)")
             axes[0].set_title(f"Representative l=0 testing solution: {representative_id}")
             axes[0].legend()
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.ls[0]), 1e-16), color="blue", label="LS")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), 1e-16), color="orange", label="LROM")
-            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index]), 1e-16), color="red", label="ROSE")
+            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.ls[0]), DISPLAY_ERROR_FLOOR), color="blue", label="LS")
+            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - case.lrom[0]), DISPLAY_ERROR_FLOOR), color="orange", label="LROM")
+            axes[1].plot(case.radius, np.maximum(np.abs(case.high_fidelity[0] - ws3_rose_wf_test[representative_index]), DISPLAY_ERROR_FLOOR), color="red", label="ROSE")
             axes[1].set_yscale("log")
             axes[1].set_xlabel("r [fm]")
             axes[1].set_ylabel("absolute difference")
@@ -562,11 +725,11 @@ def notebook_cells() -> list:
             testing_metrics = dict(ws3_emulator.testing_results.metrics["relative_l2"][0])
             testing_metrics["rose"] = ws3_rose_rel_test
             training_values = [
-                np.log10(np.maximum(training_metrics[method], 1e-16))
+                np.maximum(training_metrics[method], np.finfo(float).tiny)
                 for method in methods
             ]
             testing_values = [
-                np.log10(np.maximum(testing_metrics[method], 1e-16))
+                np.maximum(testing_metrics[method], np.finfo(float).tiny)
                 for method in methods
             ]
             fig, ax = plt.subplots(figsize=(7.2, 4.2))
@@ -595,11 +758,14 @@ def notebook_cells() -> list:
             ax.scatter(positions - 0.03, [np.median(values) for values in training_values], color="black", marker="<", s=24)
             ax.scatter(positions + 0.03, [np.median(values) for values in testing_values], color="black", marker=">", s=24)
             ax.set_xticks(positions, [method.upper() for method in methods])
-            ax.set_ylabel("log10(relative L2 error)")
+            ax.set_yscale("log")
+            ax.set_ylabel("relative L2 error")
             ax.set_title("ws_3 training and testing performance")
             ax.legend(handles=[
                 Patch(facecolor="gray", edgecolor="black", alpha=0.75, label="training (left)"),
                 Patch(facecolor="gray", edgecolor="black", alpha=0.35, label="testing (right)"),
+                Line2D([], [], color="black", marker="<", linestyle="None", label="training median"),
+                Line2D([], [], color="black", marker=">", linestyle="None", label="testing median"),
             ])
             plt.show()
             """
