@@ -63,3 +63,20 @@ def test_notebook02_shell_contract() -> None:
 def test_notebook02_code_cells_compile() -> None:
     for index, source in enumerate(code_sources(NOTEBOOK_02)):
         compile(source, f"{NOTEBOOK_02.name} code cell {index}", "exec")
+
+
+def test_notebook02_scientific_core_contract() -> None:
+    text = notebook_text(NOTEBOOK_02)
+    assert 'potential="full_woods-saxon"' in text
+    assert "l=tuple(range(L_MAX + 1))" in text
+    assert 'strategy="latin_hypercube"' in text
+    assert "seed=SEED" in text
+    assert "np.array_equal(train_rows, rose_train_rows)" in text
+    assert "np.array_equal(test_rows, rose_test_rows)" in text
+    assert "rose.InteractionEIMSpace(" in text
+    assert "rose.ScatteringAmplitudeEmulator.from_train(" in text
+    assert "lrom.project_coordinates(" in text
+    assert "lrom._cross_section_prediction(" in text
+    assert "LS-projected cross section" in text
+    assert "linear LROM" not in text
+    assert "np.max(pointwise_relative_error" in text
