@@ -9,9 +9,10 @@ reproducibility benchmark.
 
 Notebook 02 will compare ROSE and predictor LROM for differential elastic
 cross sections generated from the ten-parameter complex Woods-Saxon optical
-potential. It will use shared parameter rows, matched wavefunction-basis
-sizes, independent method-native reduced bases, an LS-projected diagnostic,
-and a paper-style Computational Accuracy versus Time (CAT) analysis.
+potential. It will use shared parameter rows, one authoritative set of
+high-fidelity training snapshots, matched wavefunction-basis sizes,
+method-native reference states, an LS-projected diagnostic, and a paper-style
+Computational Accuracy versus Time (CAT) analysis.
 
 The interactive HTML exporter requested as an optional later step in the
 Paper Results Map is outside this milestone. It will be reconsidered only
@@ -69,27 +70,38 @@ ROSE owns its native free-reference basis and its notebook-local EIM.
 LROM owns its central-reference basis and maxvol potential predictors. Their
 coefficients are not presented as directly interchangeable.
 
+Notebook 02 follows Notebook 01's ROSE boundary: ROSE builds its basis from
+the exact shared training wavefunctions but subtracts its own free reference.
+LROM builds its basis from those same wavefunctions but subtracts the central
+high-fidelity state. Sharing snapshots therefore aligns the high-fidelity
+conditions without making the two reduced representations identical.
+
+The installed ROSE observable helpers are not used because they interpret
+`l_max` as an exclusive loop bound. With `L_MAX=3`, those helpers omit the
+\(l=3\) channel even though ROSE constructed it. Notebook-local helpers
+instead loop over every constructed row in `sae.rbes`, so the high-fidelity
+reference, ROSE, LROM, and LS-projected cross sections all contain
+\(l=0,1,2,3\).
+
 ## Files
-
-### Create
-
-- `notebooks/02_rose_vs_lrom_cross_sections.ipynb`
-  - Sparse scientific presentation notebook.
-  - Uses the full 200/100 profile.
-  - Contains the requested results and figures without authored conclusions.
-- `tests/test_notebook02_cross_sections.py`
-  - Locks the Notebook 02 structure, scientific constants, method boundaries,
-    figure markers, and code-cell compilation.
 
 ### Modify
 
+- `notebooks/02_rose_vs_lrom_cross_sections.ipynb`
+  - Corrects the ROSE construction and all-channel observable assembly while
+    preserving the sparse Markdown structure and full 200/100 profile.
 - `notebooks/benchmark_notebooks/2.0/benchmark_03.ipynb`
-  - Becomes the formal Notebook 02 reproducibility and timing benchmark.
-  - Defaults to the reduced 120/30 profile.
-  - Selects the full 200/100 profile when
-    `LROM_BENCHMARK_PROFILE=full`.
+  - Applies the same correction to the formal reproducibility and timing
+    benchmark while retaining its reduced/full profile switch.
+- `tests/test_notebook02_cross_sections.py`
+  - Replaces the obsolete `from_train` and truncating-observable expectations
+    with shared-snapshot, free-reference, all-channel, and alpha-selection
+    contracts.
+- `docs/LROM_ARCHITECTURE_UNDERSTANDING.md`
+  - Records the diagnosed ROSE truncation behavior, corrected data boundary,
+    and validation evidence.
 
-The new `tests/test_notebook02_cross_sections.py` file owns both the
+The focused test file owns both the
 Notebook 02 and benchmark 03 contracts, including the reduced/full profile
 switch, matched configuration grid, per-sample CAT metric, and code-cell
 compilation.
@@ -172,23 +184,32 @@ Extract the ordered arrays once and pass those exact arrays to both methods.
 
 ROSE EIM construction uses `explicit_training=True` with the exact ordered
 training rows. This avoids the library's otherwise unseeded internal
-Latin-hypercube draw and makes both the EIM snapshots and free-reference
-wavefunction snapshots deterministic. Held-out rows are not used as ROSE
-training snapshots.
+Latin-hypercube draw. Held-out rows are not used for EIM construction or
+wavefunction-basis construction.
 
 ### 2. High-fidelity and reduced models
 
-LROM sampling uses exact ROSE Runge-Kutta wavefunctions for channels
-\(l=0..3\). It creates a separate central-reference basis for every retained
-channel and uses maxvol-selected potential predictors from the central and
-spin-orbit radial profiles.
+LROM sampling produces the authoritative exact ROSE Runge-Kutta
+wavefunctions for every spin channel in \(l=0..3\). It creates a separate
+central-reference basis for every retained channel and uses maxvol-selected
+potential predictors from the central and spin-orbit radial profiles.
 
-The notebook constructs independent ROSE emulators inline. Each uses the
-native free-reference basis, an `InteractionEIMSpace`, the same ordered
-training rows, the same radial domain, and the selected \((n_\phi,n_U)\).
+The notebook constructs ROSE emulators inline in the same explicit style as
+Notebook 01. For every partial-wave and spin channel, it creates a ROSE
+`CustomBasis` from the corresponding LROM-owned training snapshots, ROSE's
+free solution on the shared \(\rho=kr\) mesh, the shared channel solver,
+`use_svd=True`, `center=False`, and `scale=False`. The selected \(n_\phi\)
+sets the number of retained vectors. A notebook-owned
+`InteractionEIMSpace`, trained on the exact ordered training rows, supplies
+the selected \(n_U\) operator representation.
 
-High-precision ROSE `exact_dsdo` evaluations at tolerance \(10^{-9}\) provide
-the common training and testing cross-section reference.
+Notebook-local `exact_smatrix_all_channels` and
+`emulated_smatrix_all_channels` helpers allocate one entry for every row in
+`sae.rbes`. For \(l=0\), the plus and minus entries are equal. For every
+\(l>0\), index 0 supplies the \(j=l+1/2\) channel and index 1 supplies the
+\(j=l-1/2\) channel. Both helpers pass their complete arrays to
+`sae.calculate_xs`. High-precision exact evaluations at tolerance \(10^{-9}\)
+provide the common training and testing cross-section reference.
 
 ### 3. LS-projected diagnostic
 
@@ -205,15 +226,21 @@ it a cross-section floor.
 
 At the default configuration \((n_\phi,\mathrm{compression})=(6,8)\), rank
 each held-out row separately by ROSE and LROM maximum-over-angle relative
-error. Average the two ranks and select distinct rows nearest the 25th, 50th,
-and 75th percentiles of combined difficulty.
+error and average the two ranks. Select three distinct interior anchor
+positions from the ordered combined ranks using
+`np.linspace(0, len(ordered_combined) - 1, 5, dtype=int)[1:4]`.
 
-All displayed methods use those identical row indices and parameter values.
+The figures name these rows `alpha selection A`, `alpha selection B`, and
+`alpha selection C`. A compact table lists the case identifier and all ten
+parameter values for each selection. No representative title, variable,
+test, or table uses rank-quantile terminology. All displayed methods use the
+same selected row indices and parameter values.
 
 ### 5. Timings
 
 Warm each trained emulator before measurement. Measure complete online
-cross-section evaluations one sample at a time. Repeat each sample three
+cross-section evaluations one sample at a time through the same explicit
+all-channel assembly used for accuracy evaluation. Repeat each sample three
 times and retain its minimum elapsed time to reduce scheduler noise.
 
 Training, EIM construction, high-fidelity reference generation, plotting,
@@ -229,16 +256,18 @@ Notebook 02 produces:
    equally spaced standardized-distance ranks, shown at \(l=0\) and \(l=3\),
    with selected central and spin-orbit predictor locations marked in
    \(r\) [fm].
-2. Three representative cross-section panels for the selected 25th, 50th,
-   and 75th percentile held-out rows. Each panel shows the high-fidelity
-   reference, LS-projected cross section, ROSE, and LROM.
+2. Three representative cross-section panels for alpha selections A, B, and
+   C. Each panel shows the high-fidelity reference, LS-projected cross
+   section, ROSE, and LROM.
 3. Matching pointwise relative-error panels for the same rows.
-4. Training/testing split-violin distributions at the default
+4. A compact alpha-selection table containing the case identifiers and all
+   ten physical parameter values.
+5. Training/testing split-violin distributions at the default
    configuration for LS-projected, ROSE, and LROM results.
-5. Aligned basis/compression summary tables covering the full Cartesian
+6. Aligned basis/compression summary tables covering the full Cartesian
    grid.
-6. A CAT point cloud with one point per held-out sample and configuration.
-7. A compact validation table containing configuration, sample counts,
+7. A CAT point cloud with one point per held-out sample and configuration.
+8. A compact validation table containing configuration, sample counts,
    median and maximum errors, and timing summaries.
 
 The paper's 10% accuracy and one-million-evaluations-per-hour region is shown
@@ -271,9 +300,13 @@ Notebook execution stops with an assertion or exception when:
 
 - a training row exactly matches a testing row;
 - ROSE and LROM receive different ordered parameter arrays;
+- a ROSE basis is not built from the exact shared training snapshot array for
+  its partial-wave and spin channel;
 - a sample identifier no longer maps to the same row across methods;
 - a comparison uses unequal wavefunction-basis sizes;
 - a required channel in \(l=0..3\) is missing;
+- an exact, ROSE, LROM, or LS S-matrix array does not contain four partial
+  waves;
 - a predictor radius is outside the physical radial mesh;
 - a wavefunction, coefficient, cross section, error, or timing has an
   unexpected shape or a nonfinite value;
@@ -294,9 +327,16 @@ between LROM and the LS-projected cross section.
 - the Cartesian configuration values are `(4, 6, 8)` and `(4, 8, 12)`;
 - the notebook imports `lrom_legacy.v2_0` explicitly;
 - ROSE EIM construction remains notebook-owned;
+- ROSE `CustomBasis` construction consumes the shared LROM training
+  wavefunctions and a free reference;
+- ROSE's truncating `exact_dsdo` and `emulate_dsdo` paths are absent;
+- exact and emulated ROSE observables loop over every constructed partial
+  wave;
 - no linear LROM label or result is present;
 - required figure markers are present;
 - the LS label is `LS-projected cross section`;
+- representative labels use `alpha selection A/B/C`, and rank-quantile
+  wording is absent;
 - every code cell compiles.
 
 The benchmark contract verifies:
@@ -305,6 +345,8 @@ The benchmark contract verifies:
 - `LROM_BENCHMARK_PROFILE=full` selects 200/100 rows;
 - reduced mode selects 120/30 rows;
 - both profiles use \(\pm20\%\), \(l=0..3\), and the same Cartesian grid;
+- both profiles build ROSE bases from the same authoritative snapshots as
+  LROM and assemble all four partial waves explicitly;
 - CAT accuracy uses maximum-over-angle error;
 - CAT timing remains per sample;
 - every benchmark code cell compiles.
@@ -319,22 +361,61 @@ Runtime validation verifies:
 - all generated figures are visually inspected for labels, physical
   coordinates, sample alignment, clipping, and legibility.
 
+## Scientific Interpretation Boundaries
+
+The correction does not change the approved study conditions. It retains
+\(l_{\max}=3\), the 20% parameter ranges, 14.1 MeV laboratory energy, and the
+parked v2.0 potential convention.
+
+Those conditions differ from the published ROSE performance study, which
+used more partial waves, a broader parameter box, and a 14 MeV
+center-of-mass setup. The older ROSE tutorials and successful legacy LROM
+script also use a different signed optical-parameter convention. Notebook 02
+must record these as external-comparison caveats, but it must not silently
+change them during this correction.
+
+The acceptance criterion is internal scientific alignment: every method
+uses identical alpha rows, exact snapshots, kinematics, mesh, and retained
+partial waves. The benchmark reports the resulting accuracy without encoding
+an expected method winner.
+
+## Root-Cause Evidence
+
+A controlled \(l=0..3\), 20% diagnostic reproduced the original failure.
+ROSE's built-in observable path omitted \(l=3\) and differed from the
+complete-channel reference by approximately \(8.55\times10^{-1}\) in the
+median pointwise metric. With all methods assembled from the same four
+channels, a rank-8 LS reconstruction achieved a median pointwise
+cross-section error of \(3.43\times10^{-5}\) and a median
+maximum-over-angle error of \(7.22\times10^{-4}\).
+
+The scientific archive's successful cross-section implementation contains
+the same remedy in `exact_smatrix_elements_fixed()` and its explicit LS and
+predictor S-matrix loops. This design brings Notebook 02 and benchmark 03
+back into that validated methodology while retaining the user's approved
+study size.
+
 ## Acceptance Criteria
 
 The milestone is complete when:
 
 1. Notebook 02 exists under `notebooks/` with the approved sparse structure.
 2. It executes the 200/100, \(\pm20\%\), \(l=0..3\) study.
-3. ROSE and LROM use identical training/testing parameter rows.
-4. Equal-basis comparisons and the full Cartesian grid are present.
-5. Potential rainbows, predictor locations, representative cross sections,
+3. ROSE and LROM use identical parameter rows and authoritative training
+   snapshots while retaining their free- and central-reference bases.
+4. Every high-fidelity, ROSE, LROM, and LS observable contains all four
+   retained partial waves.
+5. Equal-basis comparisons and the full Cartesian grid are present.
+6. Potential rainbows, predictor locations, representative cross sections,
    error distributions, grid summaries, and CAT point clouds are rendered.
-6. The LS-projected result is described without claiming an observable-space
+7. Representative cases are alpha selections A, B, and C, and their exact
+   ten-parameter rows are shown.
+8. The LS-projected result is described without claiming an observable-space
    lower bound.
-7. Benchmark 03 supports reduced and full profiles and passes both execution
+9. Benchmark 03 supports reduced and full profiles and passes both execution
    modes.
-8. Focused and full tests pass.
-9. Figure inspection finds no scientific-label, coordinate, alignment, or
+10. Focused and full tests pass.
+11. Figure inspection finds no scientific-label, coordinate, alignment, or
    rendering defect.
-10. Public v1.2, parked v2.0 package code, Notebook 01, and archive sources
+12. Public v1.2, parked v2.0 package code, Notebook 01, and archive sources
     remain unchanged.
