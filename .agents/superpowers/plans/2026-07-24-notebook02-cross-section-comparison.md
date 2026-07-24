@@ -250,6 +250,8 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "np.array_equal(train_rows, rose_train_rows)" in text
     assert "np.array_equal(test_rows, rose_test_rows)" in text
     assert "rose.InteractionEIMSpace(" in text
+    assert "training_info=rose_train_rows" in text
+    assert "explicit_training=True" in text
     assert "rose.ScatteringAmplitudeEmulator.from_train(" in text
     assert "lrom.project_coordinates(" in text
     assert "lrom._cross_section_prediction(" in text
@@ -399,12 +401,6 @@ def bench_full_ws_so(r, alpha, ldots):
 
 rho_mesh = emulator.samples.mesh.rho
 radius_mesh = emulator.samples.mesh.radius
-rose_bounds = np.column_stack(
-    [
-        np.minimum(train_rows.min(axis=0), test_rows.min(axis=0)),
-        np.maximum(train_rows.max(axis=0), test_rows.max(axis=0)),
-    ]
-)
 rose_solver = rose.SchroedingerEquation.make_base_solver(
     s_0=6 * np.pi,
     rk_tols=[1e-9, 1e-9],
@@ -421,7 +417,8 @@ for n_phi in BASIS_SIZES:
             mu=emulator.kinematics.mu,
             energy=emulator.kinematics.e_com,
             is_complex=True,
-            training_info=rose_bounds,
+            training_info=rose_train_rows,
+            explicit_training=True,
             n_basis=n_u,
             rho_mesh=rho_mesh,
         )
@@ -963,6 +960,8 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "BASIS_SIZES = (4, 6, 8)" in text
     assert "ROSE_EIM_SIZES = (4, 8, 12)" in text
     assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
+    assert "training_info=rose_train_rows" in text
+    assert "explicit_training=True" in text
     assert "np.max(pointwise_relative_error" in text
     assert "test_seconds" in text
     assert "LS-projected cross section" in text

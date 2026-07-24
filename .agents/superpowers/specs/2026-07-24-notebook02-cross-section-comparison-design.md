@@ -170,9 +170,11 @@ Generate the training and testing Latin-hypercube designs with v2.0
 create independent deterministic random streams. Reject exact row overlap.
 Extract the ordered arrays once and pass those exact arrays to both methods.
 
-ROSE EIM bounds span the complete training/testing domain, preserving the
-project's approved benchmark convention. The held-out row values are not
-used as ROSE wavefunction snapshots.
+ROSE EIM construction uses `explicit_training=True` with the exact ordered
+training rows. This avoids the library's otherwise unseeded internal
+Latin-hypercube draw and makes both the EIM snapshots and free-reference
+wavefunction snapshots deterministic. Held-out rows are not used as ROSE
+training snapshots.
 
 ### 2. High-fidelity and reduced models
 

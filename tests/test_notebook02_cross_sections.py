@@ -81,6 +81,8 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "np.array_equal(train_rows, rose_train_rows)" in text
     assert "np.array_equal(test_rows, rose_test_rows)" in text
     assert "rose.InteractionEIMSpace(" in text
+    assert "training_info=rose_train_rows" in text
+    assert "explicit_training=True" in text
     assert "rose.ScatteringAmplitudeEmulator.from_train(" in text
     assert "lrom.project_coordinates(" in text
     assert "lrom._cross_section_prediction(" in text
@@ -122,6 +124,8 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "BASIS_SIZES = (4, 6, 8)" in text
     assert "ROSE_EIM_SIZES = (4, 8, 12)" in text
     assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
+    assert "training_info=rose_train_rows" in text
+    assert "explicit_training=True" in text
     assert "np.max(pointwise_relative_error" in text
     assert "test_seconds" in text
     assert "LS-projected cross section" in text
