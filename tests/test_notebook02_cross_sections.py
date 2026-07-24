@@ -42,6 +42,13 @@ def code_sources(path: Path) -> list[str]:
 
 def test_notebook02_shell_contract() -> None:
     assert NOTEBOOK_02.exists()
+    notebook = load_notebook(NOTEBOOK_02)
+    markdown = tuple(
+        "".join(cell["source"]).strip()
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "markdown"
+    )
+    assert markdown == HEADINGS
     text = notebook_text(NOTEBOOK_02)
     for heading in HEADINGS:
         assert heading in text
@@ -80,3 +87,25 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "LS-projected cross section" in text
     assert "linear LROM" not in text
     assert "np.max(pointwise_relative_error" in text
+
+
+def test_notebook02_results_contract() -> None:
+    text = notebook_text(NOTEBOOK_02)
+    for marker in (
+        "potential-predictor-rainbows",
+        "representative-cross-sections",
+        "cross-section-errors",
+        "error-violins",
+        "cat-plot",
+        "validation-summary",
+    ):
+        assert f"# FIGURE: {marker}" in text or f"# TABLE: {marker}" in text
+    assert "selected_radii" in text
+    assert "radius_mesh" in text
+    assert "combined_rank" in text
+    assert "25th percentile" in text
+    assert "50th percentile" in text
+    assert "75th percentile" in text
+    assert "one million evaluations/hour" in text
+    assert "10% maximum relative error" in text
+    assert "def plot_" not in text
