@@ -104,12 +104,17 @@ def test_notebook02_results_contract() -> None:
         assert f"# FIGURE: {marker}" in text or f"# TABLE: {marker}" in text
     assert "selected_radii" in text
     assert "radius_mesh" in text
+    assert "radius_mask = radius_mesh >= 0.2" in text
     assert "combined_rank" in text
     assert "25th percentile" in text
     assert "50th percentile" in text
     assert "75th percentile" in text
     assert "one million evaluations/hour" in text
     assert "10% maximum relative error" in text
+    assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
+    assert "ax.set_ylim(bottom=PLOTTING_FLOOR)" not in text
+    assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
+    assert "bbox_to_anchor=(1.02, 1.0)" in text
     assert "def plot_" not in text
 
 
@@ -126,6 +131,9 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
     assert "training_info=rose_train_rows" in text
     assert "explicit_training=True" in text
+    assert "radius_mask = radius_mesh >= 0.2" in text
+    assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
+    assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
     assert "np.max(pointwise_relative_error" in text
     assert "test_seconds" in text
     assert "LS-projected cross section" in text
