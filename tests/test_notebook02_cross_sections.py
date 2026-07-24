@@ -85,7 +85,7 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "explicit_training=True" in text
     assert "rose.basis.CustomBasis(" in text
     assert "solutions=np.asarray(" in text
-    assert "phi_0=np.asarray(" in text
+    assert "free_reference = np.asarray(" in text
     assert "def exact_smatrix_all_channels" in text
     assert "def emulated_smatrix_all_channels" in text
     assert "def cross_section_from_smatrix" in text
