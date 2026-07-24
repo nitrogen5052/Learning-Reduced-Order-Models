@@ -118,6 +118,7 @@ def test_notebook02_results_contract() -> None:
     assert "alpha selection C" in text
     assert "percentile" not in text.lower()
     assert "alpha_selection_table" in text
+    assert "display(alpha_selection_table)" in text
     assert "one million evaluations/hour" in text
     assert "10% maximum relative error" in text
     assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
@@ -156,6 +157,7 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "alpha selection B" in text
     assert "alpha selection C" in text
     assert "percentile" not in text.lower()
+    assert "display(alpha_selection_table)" in text
     assert "linear LROM" not in text
 
 
