@@ -109,3 +109,25 @@ def test_notebook02_results_contract() -> None:
     assert "one million evaluations/hour" in text
     assert "10% maximum relative error" in text
     assert "def plot_" not in text
+
+
+def test_benchmark03_notebook02_profile_contract() -> None:
+    assert BENCHMARK_03.exists()
+    text = notebook_text(BENCHMARK_03)
+    assert 'os.environ.get("LROM_BENCHMARK_PROFILE", "reduced")' in text
+    assert '"reduced": (120, 30)' in text
+    assert '"full": (200, 100)' in text
+    assert "HALF_WIDTH = 0.20" in text
+    assert "L_MAX = 3" in text
+    assert "BASIS_SIZES = (4, 6, 8)" in text
+    assert "ROSE_EIM_SIZES = (4, 8, 12)" in text
+    assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
+    assert "np.max(pointwise_relative_error" in text
+    assert "test_seconds" in text
+    assert "LS-projected cross section" in text
+    assert "linear LROM" not in text
+
+
+def test_benchmark03_code_cells_compile() -> None:
+    for index, source in enumerate(code_sources(BENCHMARK_03)):
+        compile(source, f"{BENCHMARK_03.name} code cell {index}", "exec")
