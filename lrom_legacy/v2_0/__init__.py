@@ -2019,8 +2019,7 @@ def _scattering_amplitude_emulator(*, emulator):
         return cached
     rose = _import_rose()
     samples = emulator.samples
-    if samples is None or samples.interaction_space is None:
-        raise LROMStateError("cross-section prediction requires sampled state")
+    interactions = _prediction_interaction_space(emulator=emulator)
     options = emulator.training_options or {}
     angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
     partial_waves = tuple(emulator.partial_waves)
@@ -2028,24 +2027,53 @@ def _scattering_amplitude_emulator(*, emulator):
         raise ValueError(
             "cross-section prediction requires contiguous partial waves starting at l=0"
         )
+    if samples is None:
+        rho_mesh = emulator.mesh.rho
+        base_solver = rose.SchroedingerEquation.make_base_solver(
+            s_0=6.0 * np.pi,
+            rk_tols=[1e-9, 1e-9],
+            domain=np.asarray(
+                [rho_mesh[0], rho_mesh[-1]],
+                dtype=float,
+            ),
+        )
+        s_0 = base_solver.s_0
+    else:
+        rho_mesh = samples.mesh.rho
+        base_solver = None
+        s_0 = samples.full_order_models[
+            partial_waves[0]
+        ].base_solver.s_0
     bases = []
     for ell in partial_waves:
-        interaction_row = samples.interaction_space.interactions[ell]
+        interaction_row = interactions.interactions[ell]
         row_bases = []
-        for spin_index in range(len(interaction_row)):
+        for spin_index, interaction in enumerate(interaction_row):
             key = _interaction_channel_key(interaction_row, ell, spin_index)
-            model = samples.full_order_models[key]
             basis_state = emulator.basis[key]
+            if samples is None:
+                solver = base_solver.clone_for_new_interaction(interaction)
+                solutions = np.column_stack(
+                    (basis_state.phi0, basis_state.vectors)
+                )
+                phi_0 = basis_state.phi0
+            else:
+                model = samples.full_order_models[key]
+                solver = model.solver
+                solutions = np.asarray(
+                    samples.training_wavefunctions[key],
+                    dtype=np.complex128,
+                ).T.copy()
+                phi_0 = np.asarray(
+                    samples.central_wavefunctions[key],
+                    dtype=np.complex128,
+                ).copy()
             custom_basis = rose.basis.CustomBasis(
-                solutions=np.asarray(
-                    samples.training_wavefunctions[key], dtype=np.complex128
-                ).T.copy(),
-                phi_0=np.asarray(
-                    samples.central_wavefunctions[key], dtype=np.complex128
-                ).copy(),
-                rho_mesh=samples.mesh.rho,
+                solutions=solutions,
+                phi_0=phi_0,
+                rho_mesh=rho_mesh,
                 n_basis=basis_state.basis_size,
-                solver=model.solver,
+                solver=solver,
                 subtract_phi0=True,
                 use_svd=True,
                 center=False,
@@ -2056,11 +2084,11 @@ def _scattering_amplitude_emulator(*, emulator):
             row_bases.append(custom_basis)
         bases.append(row_bases)
     sae = rose.ScatteringAmplitudeEmulator(
-        samples.interaction_space,
+        interactions,
         bases,
         l_max=max(partial_waves),
         angles=np.deg2rad(angles_degrees),
-        s_0=samples.full_order_models[partial_waves[0]].base_solver.s_0,
+        s_0=s_0,
         Smatrix_abs_tol=1e-8,
         initialize_emulator=True,
     )
@@ -2295,33 +2323,49 @@ def _smatrix_from_packed_coordinates(
     )
 
 
+def _cross_sections_from_smatrix(
+    *,
+    emulator,
+    values: np.ndarray,
+    smatrix: SmatrixState,
+) -> CrossSectionState:
+    """Assemble cross sections with the SAE's precomputed angle tables."""
+    options = emulator.training_options or {}
+    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
+    angles = np.deg2rad(angles_degrees)
+    sae = _scattering_amplitude_emulator(emulator=emulator)
+    if not np.array_equal(np.asarray(sae.angles), angles):
+        raise ValueError("ROSE angle cache does not match the trained grid")
+    cross_sections = [
+        sae.calculate_xs(splus, sminus, row).dsdo
+        for row, splus, sminus in zip(
+            values,
+            smatrix.splus,
+            smatrix.sminus,
+        )
+    ]
+    return CrossSectionState(
+        angles_degrees=angles_degrees,
+        values=np.asarray(cross_sections, dtype=float),
+    )
+
+
 def _cross_section_prediction(
     *,
     emulator,
     values: np.ndarray,
     coefficients: Mapping[Any, np.ndarray],
 ) -> tuple[SmatrixState, CrossSectionState]:
-    options = emulator.training_options or {}
-    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
-    angles = np.deg2rad(angles_degrees)
     sae = _scattering_amplitude_emulator(emulator=emulator)
     smatrix = _packed_smatrix_from_coefficients(
         emulator=emulator,
         sae=sae,
         coefficients=coefficients,
     )
-    cross_sections = [
-        sae.calculate_xs(splus, sminus, row, angles=angles).dsdo
-        for row, splus, sminus in zip(
-            values, smatrix.splus, smatrix.sminus
-        )
-    ]
-    return (
-        smatrix,
-        CrossSectionState(
-            angles_degrees=angles_degrees,
-            values=np.asarray(cross_sections, dtype=float),
-        ),
+    return smatrix, _cross_sections_from_smatrix(
+        emulator=emulator,
+        values=values,
+        smatrix=smatrix,
     )
 
 
@@ -2471,7 +2515,53 @@ def predict(
 ) -> PredictionState:
     """Predict one or more named parameter cases from trained portable state."""
     values = _parameter_rows(emulator=emulator, parameters=parameters)
+    options = emulator.training_options or {}
+    if (
+        not reconstruct_wavefunctions
+        and options.get("observable") != "cross_section"
+    ):
+        raise LROMStateError(
+            "observable-only prediction requires cross_section training"
+        )
     predictor = emulator.predictors
+    use_fast_observable_path = (
+        options.get("observable") == "cross_section"
+        and not reconstruct_wavefunctions
+        and emulator.config.potential.name == "full_woods-saxon"
+        and isinstance(predictor, Mapping)
+    )
+    if use_fast_observable_path:
+        cache = _cross_section_cache(emulator=emulator)
+        features = _packed_effective_interaction_features(
+            emulator=emulator,
+            values=values,
+            cache=cache,
+        )
+        packed = _solve_packed_coordinates(
+            features=features,
+            cache=cache,
+        )
+        coefficients = {
+            channel: packed[:, offset]
+            for offset, channel in enumerate(cache["channel_keys"])
+        }
+        smatrix = _smatrix_from_packed_coordinates(
+            coordinates=packed,
+            cache=cache,
+        )
+        cross_sections = _cross_sections_from_smatrix(
+            emulator=emulator,
+            values=values,
+            smatrix=smatrix,
+        )
+        return PredictionState(
+            parameter_names=emulator.parameter_names,
+            parameters=values,
+            coefficients=coefficients,
+            wavefunctions={},
+            smatrix=smatrix,
+            cross_sections=cross_sections,
+        )
     if isinstance(predictor, Mapping):
         features = effective_interaction_features(
             emulator=emulator,
@@ -2501,11 +2591,6 @@ def predict(
             channel: solve_rf_lrom(model=model, predictors=features)
             for channel, model in emulator.rf_lrom.items()
         }
-    options = emulator.training_options or {}
-    if not reconstruct_wavefunctions and options.get("observable") != "cross_section":
-        raise LROMStateError(
-            "observable-only prediction requires cross_section training"
-        )
     wavefunctions = (
         {
             channel: reconstruct(

@@ -362,6 +362,75 @@ def test_observable_only_prediction_matches_full_prediction():
     )
 
 
+def test_observable_only_full_woods_saxon_bypasses_channel_dispatch(
+    monkeypatch,
+):
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    row = dict(
+        zip(
+            emulator.parameter_names,
+            emulator.samples.design.testing.values[0],
+        )
+    )
+
+    def fail_channel_dispatch(**_kwargs):
+        raise AssertionError("observable-only fast path used channel dispatch")
+
+    monkeypatch.setattr(
+        v2,
+        "effective_interaction_features",
+        fail_channel_dispatch,
+    )
+
+    emulator.predict(
+        parameters=row,
+        reconstruct_wavefunctions=False,
+    )
+
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+
+
+def test_cross_section_prediction_reuses_cached_angles(monkeypatch):
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    row = dict(
+        zip(
+            emulator.parameter_names,
+            emulator.samples.design.testing.values[0],
+        )
+    )
+    sae = v2._scattering_amplitude_emulator(emulator=emulator)
+    original = sae.calculate_xs
+    calls = []
+
+    def calculate_xs(splus, sminus, parameters, *args, **kwargs):
+        calls.append(dict(kwargs))
+        return original(splus, sminus, parameters, *args, **kwargs)
+
+    monkeypatch.setattr(sae, "calculate_xs", calculate_xs)
+
+    emulator.predict(
+        parameters=row,
+        reconstruct_wavefunctions=False,
+    )
+
+    assert calls
+    assert all("angles" not in kwargs for kwargs in calls)
+
+
 def test_packed_smatrix_matches_scalar_channel_conversion():
     emulator = small_cross_section_emulator()
     emulator.train(
@@ -469,3 +538,53 @@ def test_effective_interaction_artifact_round_trips_wavefunction_prediction(
     assert set(loaded.predictors) == set(emulator.predictors)
     for channel, values in expected.items():
         assert np.allclose(loaded.predictions.wavefunctions[channel], values)
+
+
+def test_cross_section_artifact_lazily_rebuilds_fast_cache(tmp_path):
+    trained = small_cross_section_emulator()
+    trained.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    row = dict(
+        zip(
+            trained.parameter_names,
+            trained.samples.design.testing.values[2],
+        )
+    )
+    trained.predict(parameters=row, reconstruct_wavefunctions=False)
+    expected = trained.predictions
+    path = tmp_path / "cross-section.lrom"
+    trained.save(path=path)
+
+    loaded = v2.load(path=path)
+    assert loaded._packed_cross_section_cache is None
+
+    loaded.predict(parameters=row, reconstruct_wavefunctions=False)
+    actual = loaded.predictions
+
+    with zipfile.ZipFile(path) as archive:
+        metadata = json.loads(archive.read("metadata.json"))
+    assert metadata["artifact_schema"] == 2
+    assert loaded._packed_cross_section_cache is not None
+    np.testing.assert_allclose(
+        actual.smatrix.splus,
+        expected.smatrix.splus,
+        rtol=2e-12,
+        atol=2e-12,
+    )
+    np.testing.assert_allclose(
+        actual.smatrix.sminus,
+        expected.smatrix.sminus,
+        rtol=2e-12,
+        atol=2e-12,
+    )
+    np.testing.assert_allclose(
+        actual.cross_sections.values,
+        expected.cross_sections.values,
+        rtol=2e-11,
+        atol=1e-10,
+    )
