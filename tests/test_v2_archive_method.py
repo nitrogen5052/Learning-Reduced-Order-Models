@@ -1,4 +1,7 @@
+import io
+import json
 from types import SimpleNamespace
+import zipfile
 
 import numpy as np
 import pytest
@@ -290,3 +293,42 @@ def test_packed_smatrix_matches_scalar_channel_conversion():
                         rbe_row[1], coefficients[(ell, 1)][case_index]
                     ),
                 )
+
+
+def test_effective_interaction_artifact_round_trips_wavefunction_prediction(
+    tmp_path,
+):
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+    )
+    row = dict(
+        zip(
+            emulator.parameter_names,
+            emulator.samples.design.testing.values[0],
+        )
+    )
+    emulator.predict(parameters=row)
+    expected = {
+        channel: values.copy()
+        for channel, values in emulator.predictions.wavefunctions.items()
+    }
+    path = tmp_path / "archive-method.lrom"
+
+    emulator.save(path=path)
+    loaded = v2.load(path=path)
+    loaded.predict(parameters=row)
+
+    with zipfile.ZipFile(path) as archive:
+        metadata = json.loads(archive.read("metadata.json"))
+        arrays = np.load(
+            io.BytesIO(archive.read("arrays.npz")), allow_pickle=False
+        )
+    assert metadata["artifact_schema"] == 2
+    assert metadata["predictor"]["layout"] == "by_channel"
+    assert all(value.dtype != object for value in arrays.values())
+    assert set(loaded.predictors) == set(emulator.predictors)
+    for channel, values in expected.items():
+        assert np.allclose(loaded.predictions.wavefunctions[channel], values)

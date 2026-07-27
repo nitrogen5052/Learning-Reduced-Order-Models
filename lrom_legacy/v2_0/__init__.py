@@ -1214,22 +1214,61 @@ def effective_interaction_features(
     if values.ndim == 1:
         values = values[np.newaxis, :]
     samples = emulator.samples
-    if samples is None:
-        raise LROMStateError(
-            "effective-interaction prediction requires sampled channel state"
-        )
     features = {}
     for channel, predictor in predictors.items():
-        try:
-            model = samples.full_order_models[channel]
-        except KeyError as exc:
-            raise LROMStateError(
-                f"missing sampled interaction for channel {channel}"
-            ) from exc
-        rho_points = samples.mesh.rho[predictor.selected_indices]
-        raw = np.asarray(
-            [model.interaction.tilde(rho_points, row) for row in values]
-        )
+        if samples is not None:
+            try:
+                model = samples.full_order_models[channel]
+            except KeyError as exc:
+                raise LROMStateError(
+                    f"missing sampled interaction for channel {channel}"
+                ) from exc
+            rho_points = samples.mesh.rho[predictor.selected_indices]
+            raw = np.asarray(
+                [model.interaction.tilde(rho_points, row) for row in values]
+            )
+        else:
+            interactions = getattr(
+                emulator, "_portable_interaction_cache", None
+            )
+            if interactions is None:
+                rose = _import_rose()
+                options = {
+                    "l_max": max(emulator.partial_waves),
+                    "n_theta": len(emulator.parameter_names),
+                    "mu": emulator.kinematics.mu,
+                    "energy": emulator.kinematics.e_com,
+                }
+                if emulator.config.potential.name == "full_woods-saxon":
+                    options.update(
+                        coordinate_space_potential=_full_ws_interaction,
+                        spin_orbit_term=_full_ws_spin_orbit,
+                        is_complex=True,
+                    )
+                elif emulator.config.potential.name == "woods-saxon":
+                    options.update(
+                        coordinate_space_potential=rose.koning_delaroche.KD_simple,
+                        spin_orbit_term=rose.koning_delaroche.KD_simple_so,
+                        is_complex=True,
+                    )
+                else:
+                    options.update(
+                        coordinate_space_potential=_real_ws_interaction,
+                        is_complex=False,
+                    )
+                interactions = rose.InteractionSpace(**options)
+                emulator._portable_interaction_cache = interactions
+            ell, spin_index = (
+                (channel, 0) if isinstance(channel, int) else channel
+            )
+            interaction = interactions.interactions[ell][spin_index]
+            rho_points = predictor.selected_radii * emulator.kinematics.k
+            raw = np.asarray(
+                [
+                    interaction.tilde(rho_points, row)
+                    for row in values
+                ]
+            )
         features[channel] = (
             raw - predictor.central_values[np.newaxis, :]
         ) / predictor.scales[np.newaxis, :]
@@ -2216,12 +2255,17 @@ def predict(
 # artifacts
 # ==========================================================================
 
-ARTIFACT_SCHEMA = 1
+ARTIFACT_SCHEMA = 2
 
 
 def _json_config(emulator: LROM) -> dict[str, object]:
     potential_name = emulator.config.potential.name
-    if potential_name not in {"ws_1", "ws_3", "woods-saxon"}:
+    if potential_name not in {
+        "ws_1",
+        "ws_3",
+        "woods-saxon",
+        "full_woods-saxon",
+    }:
         raise LROMArtifactError(
             "portable artifacts require a registered potential name"
         )
@@ -2237,6 +2281,45 @@ def _json_config(emulator: LROM) -> dict[str, object]:
     }
 
 
+def _channel_token(channel: Any) -> str:
+    if isinstance(channel, tuple):
+        return f"l{channel[0]}_s{channel[1]}"
+    return f"l{channel}"
+
+
+def _channel_metadata(channel: Any) -> int | list[int]:
+    return list(channel) if isinstance(channel, tuple) else int(channel)
+
+
+def _channel_from_metadata(value: Any) -> Any:
+    return tuple(int(item) for item in value) if isinstance(value, list) else int(value)
+
+
+def _store_predictor(
+    arrays: dict[str, np.ndarray],
+    *,
+    prefix: str,
+    predictor: PredictorState,
+) -> None:
+    arrays[f"{prefix}parameter_indices"] = np.asarray(
+        predictor.parameter_indices
+    )
+    arrays[f"{prefix}center"] = np.asarray(predictor.center)
+    arrays[f"{prefix}scales"] = np.asarray(predictor.scales)
+    arrays[f"{prefix}selected_indices"] = np.asarray(
+        predictor.selected_indices
+    )
+    arrays[f"{prefix}selected_radii"] = np.asarray(
+        predictor.selected_radii
+    )
+    arrays[f"{prefix}central_values"] = np.asarray(
+        predictor.central_values
+    )
+    arrays[f"{prefix}singular_values"] = np.asarray(
+        predictor.singular_values
+    )
+
+
 def save_artifact(*, path: str | Path, emulator: LROM) -> None:
     """Write prediction-critical state without pickle or live ROSE objects."""
     if emulator.mesh is None or emulator.kinematics is None:
@@ -2246,19 +2329,39 @@ def save_artifact(*, path: str | Path, emulator: LROM) -> None:
     arrays: dict[str, np.ndarray] = {
         "mesh_rho": np.asarray(emulator.mesh.rho),
         "mesh_radius": np.asarray(emulator.mesh.radius),
-        "predictor_parameter_indices": np.asarray(predictor.parameter_indices),
-        "predictor_center": np.asarray(predictor.center),
-        "predictor_scales": np.asarray(predictor.scales),
-        "predictor_selected_indices": np.asarray(predictor.selected_indices),
-        "predictor_selected_radii": np.asarray(predictor.selected_radii),
-        "predictor_central_values": np.asarray(predictor.central_values),
-        "predictor_singular_values": np.asarray(predictor.singular_values),
     }
+    if isinstance(predictor, Mapping):
+        predictor_metadata = {
+            "layout": "by_channel",
+            "channels": [],
+        }
+        for channel, state in predictor.items():
+            token = _channel_token(channel)
+            _store_predictor(
+                arrays, prefix=f"predictor_{token}_", predictor=state
+            )
+            predictor_metadata["channels"].append(
+                {
+                    "key": _channel_metadata(channel),
+                    "token": token,
+                    "kind": state.kind,
+                    "names": list(state.names),
+                    "parameter_names": list(state.parameter_names),
+                }
+            )
+    else:
+        _store_predictor(arrays, prefix="predictor_", predictor=predictor)
+        predictor_metadata = {
+            "layout": "shared",
+            "kind": predictor.kind,
+            "names": list(predictor.names),
+            "parameter_names": list(predictor.parameter_names),
+        }
     channels: dict[str, dict[str, object]] = {}
-    for channel in emulator.partial_waves:
+    for channel in _trained_channels(emulator):
         basis = emulator.basis[channel]
         model = emulator.rf_lrom[channel]
-        prefix = f"l{channel}"
+        prefix = _channel_token(channel)
         arrays[f"{prefix}_phi0"] = np.asarray(basis.phi0)
         arrays[f"{prefix}_basis_vectors"] = np.asarray(basis.vectors)
         arrays[f"{prefix}_basis_singular_values"] = np.asarray(
@@ -2266,10 +2369,16 @@ def save_artifact(*, path: str | Path, emulator: LROM) -> None:
         )
         arrays[f"{prefix}_rf_matrices"] = np.asarray(model.matrices)
         arrays[f"{prefix}_rf_vectors"] = np.asarray(model.vectors)
+        arrays[f"{prefix}_rf_constant_vector"] = np.asarray(
+            np.zeros(model.n_basis)
+            if model.constant_vector is None
+            else model.constant_vector
+        )
         arrays[f"{prefix}_rf_singular_values"] = np.asarray(
             model.singular_values
         )
-        channels[str(channel)] = {
+        channels[prefix] = {
+            "key": _channel_metadata(channel),
             "residual_mse": model.residual_mse,
             "rank": model.rank,
         }
@@ -2288,12 +2397,23 @@ def save_artifact(*, path: str | Path, emulator: LROM) -> None:
             "eta": emulator.kinematics.eta,
             "coulomb_radius": emulator.kinematics.coulomb_radius,
         },
-        "predictor": {
-            "kind": predictor.kind,
-            "names": list(predictor.names),
-            "parameter_names": list(predictor.parameter_names),
-        },
+        "predictor": predictor_metadata,
         "channels": channels,
+        "training_options": {
+            "basis_size": int(emulator.training_options["basis_size"]),
+            "predictor": emulator.training_options["predictor"],
+            "predictor_count": int(
+                emulator.training_options["predictor_count"]
+            ),
+            "observable": emulator.training_options["observable"],
+            "angles_degrees": (
+                None
+                if emulator.training_options["angles_degrees"] is None
+                else np.asarray(
+                    emulator.training_options["angles_degrees"]
+                ).tolist()
+            ),
+        },
         "training_environment": {
             "python": platform.python_version(),
             "numpy": np.__version__,
@@ -2323,6 +2443,33 @@ def _required_array(arrays, name: str) -> np.ndarray:
     return value
 
 
+def _load_predictor(arrays, *, prefix: str, metadata: Mapping[str, Any]):
+    return PredictorState(
+        kind=metadata["kind"],
+        names=tuple(metadata["names"]),
+        parameter_names=tuple(metadata["parameter_names"]),
+        parameter_indices=_required_array(
+            arrays, f"{prefix}parameter_indices"
+        ).astype(int),
+        center=_required_array(arrays, f"{prefix}center"),
+        scales=_required_array(arrays, f"{prefix}scales"),
+        training_features=np.empty((0, 0)),
+        testing_features=np.empty((0, 0)),
+        selected_indices=_required_array(
+            arrays, f"{prefix}selected_indices"
+        ).astype(int),
+        selected_radii=_required_array(
+            arrays, f"{prefix}selected_radii"
+        ),
+        central_values=_required_array(
+            arrays, f"{prefix}central_values"
+        ),
+        singular_values=_required_array(
+            arrays, f"{prefix}singular_values"
+        ),
+    )
+
+
 def load_artifact(*, path: str | Path) -> LROM:
     """Load a portable prediction-only emulator."""
     source = Path(path)
@@ -2334,7 +2481,8 @@ def load_artifact(*, path: str | Path) -> LROM:
             array_bytes = archive.read("arrays.npz")
     except (OSError, zipfile.BadZipFile, KeyError, json.JSONDecodeError) as exc:
         raise LROMArtifactError(f"invalid LROM artifact {source}") from exc
-    if metadata.get("artifact_schema") != ARTIFACT_SCHEMA:
+    schema = metadata.get("artifact_schema")
+    if schema not in {1, ARTIFACT_SCHEMA}:
         raise LROMArtifactError(
             f"unsupported artifact schema {metadata.get('artifact_schema')!r}"
         )
@@ -2366,31 +2514,30 @@ def load_artifact(*, path: str | Path) -> LROM:
             radius=_required_array(arrays, "mesh_radius"),
         )
         predictor_meta = metadata["predictor"]
-        predictor = PredictorState(
-            kind=predictor_meta["kind"],
-            names=tuple(predictor_meta["names"]),
-            parameter_names=tuple(predictor_meta["parameter_names"]),
-            parameter_indices=_required_array(
-                arrays, "predictor_parameter_indices"
-            ).astype(int),
-            center=_required_array(arrays, "predictor_center"),
-            scales=_required_array(arrays, "predictor_scales"),
-            training_features=np.empty((0, 0)),
-            testing_features=np.empty((0, 0)),
-            selected_indices=_required_array(
-                arrays, "predictor_selected_indices"
-            ).astype(int),
-            selected_radii=_required_array(arrays, "predictor_selected_radii"),
-            central_values=_required_array(arrays, "predictor_central_values"),
-            singular_values=_required_array(
-                arrays, "predictor_singular_values"
-            ),
-        )
+        if schema == 2 and predictor_meta.get("layout") == "by_channel":
+            predictor = {}
+            for item in predictor_meta["channels"]:
+                channel = _channel_from_metadata(item["key"])
+                predictor[channel] = _load_predictor(
+                    arrays,
+                    prefix=f"predictor_{item['token']}_",
+                    metadata=item,
+                )
+        else:
+            predictor = _load_predictor(
+                arrays,
+                prefix="predictor_",
+                metadata=predictor_meta,
+            )
         bases = {}
         models = {}
-        for channel_text, model_meta in metadata["channels"].items():
-            channel = int(channel_text)
-            prefix = f"l{channel}"
+        for token, model_meta in metadata["channels"].items():
+            channel = (
+                _channel_from_metadata(model_meta["key"])
+                if schema == 2
+                else int(token)
+            )
+            prefix = token if schema == 2 else f"l{channel}"
             bases[channel] = BasisState(
                 phi0=_required_array(arrays, f"{prefix}_phi0"),
                 vectors=_required_array(arrays, f"{prefix}_basis_vectors"),
@@ -2407,6 +2554,27 @@ def load_artifact(*, path: str | Path) -> LROM:
                 singular_values=_required_array(
                     arrays, f"{prefix}_rf_singular_values"
                 ),
+                constant_vector=(
+                    _required_array(
+                        arrays, f"{prefix}_rf_constant_vector"
+                    )
+                    if schema == 2
+                    else np.zeros(bases[channel].basis_size)
+                ),
+            )
+        if "training_options" in metadata:
+            training_options = metadata["training_options"]
+        else:
+            training_options = {
+                "basis_size": next(iter(bases.values())).basis_size,
+                "predictor": predictor_meta["kind"],
+                "predictor_count": next(iter(models.values())).n_predictors,
+                "observable": "wavefunction",
+                "angles_degrees": None,
+            }
+        if training_options["angles_degrees"] is not None:
+            training_options["angles_degrees"] = np.asarray(
+                training_options["angles_degrees"], dtype=float
             )
         emulator._training_state = TrainingState(
             basis=bases,
@@ -2414,10 +2582,11 @@ def load_artifact(*, path: str | Path) -> LROM:
             rf_lrom=models,
             testing_results=None,
             testing_errors={channel: {} for channel in bases},
+            training_options=training_options,
         )
         emulator._inference_only = True
         emulator._provenance = {
-            "artifact_schema": ARTIFACT_SCHEMA,
+            "artifact_schema": schema,
             "package_version": metadata["package_version"],
             "config_hash": metadata["config_hash"],
             "training_environment": metadata["training_environment"],
