@@ -240,6 +240,72 @@ def test_packed_coefficients_match_individual_channel_solves():
         assert np.allclose(packed[:, offset], scalar)
 
 
+def test_flattened_full_woods_saxon_features_match_reference():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    cache = v2._cross_section_cache(emulator=emulator)
+    rows = np.asarray(
+        emulator.samples.design.testing.values[:2], dtype=float
+    )
+    reference = v2.effective_interaction_features(
+        emulator=emulator,
+        predictors=emulator.predictors,
+        values=rows,
+    )
+
+    actual = v2._packed_effective_interaction_features(
+        emulator=emulator,
+        values=rows,
+        cache=cache,
+    )
+    expected = np.stack(
+        [reference[channel] for channel in cache["channel_keys"]],
+        axis=1,
+    )
+
+    assert actual.shape == (2, len(emulator.rf_lrom), 2)
+    np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
+
+
+def test_packed_features_fall_back_to_reference():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    cache = v2._cross_section_cache(emulator=emulator).copy()
+    cache["potential_name"] = None
+    rows = np.asarray(
+        emulator.samples.design.testing.values[:2], dtype=float
+    )
+    reference = v2.effective_interaction_features(
+        emulator=emulator,
+        predictors=emulator.predictors,
+        values=rows,
+    )
+    expected = np.stack(
+        [reference[channel] for channel in cache["channel_keys"]],
+        axis=1,
+    )
+
+    actual = v2._packed_effective_interaction_features(
+        emulator=emulator,
+        values=rows,
+        cache=cache,
+    )
+
+    np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
+
+
 def test_observable_only_prediction_matches_full_prediction():
     emulator = small_cross_section_emulator()
     emulator.train(

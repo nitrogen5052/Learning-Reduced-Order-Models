@@ -137,6 +137,7 @@ evaluation_radii
 ell
 spin
 ldots
+energy_scales
 centers
 scales
 matrices
@@ -295,6 +296,7 @@ def _packed_effective_interaction_features(
         ],
         dtype=np.complex128,
     ).reshape(rows.shape[0], *shape)
+    raw /= cache["energy_scales"][None, :, None]
     return (
         raw - cache["centers"][None, :, :]
     ) / cache["scales"][None, :, :]
@@ -304,7 +306,7 @@ For the registered fast branch:
 
 1. Flatten `cache["evaluation_radii"]` and repeat `cache["ldots"]` over the predictor axis.
 2. Evaluate the existing central and spin-orbit Woods-Saxon NumPy functions once per parameter row on that flattened radius array.
-3. Compute `central + ldots * spin_orbit`, reshape to `(samples, channels, predictor_count)`, and normalize with:
+3. Compute `central + ldots * spin_orbit`, divide each channel by its cached ROSE center-of-mass energy to reproduce `interaction.tilde`, reshape to `(samples, channels, predictor_count)`, and normalize with:
 
 ```python
 (raw_features - cache["centers"][None, :, :]) / cache["scales"][None, :, :]

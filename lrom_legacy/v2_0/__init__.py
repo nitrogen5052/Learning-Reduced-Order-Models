@@ -1282,6 +1282,55 @@ def effective_interaction_features(
     return features
 
 
+def _generic_packed_effective_interaction_features(
+    *,
+    emulator,
+    rows: np.ndarray,
+) -> np.ndarray:
+    """Stack the existing channel-dispatch feature path."""
+    features = effective_interaction_features(
+        emulator=emulator,
+        predictors=emulator.predictors,
+        values=rows,
+    )
+    return np.stack(
+        [features[channel] for channel in emulator.rf_lrom],
+        axis=1,
+    )
+
+
+def _packed_effective_interaction_features(
+    *,
+    emulator,
+    values: np.ndarray,
+    cache: Mapping[str, Any],
+) -> np.ndarray:
+    """Evaluate all registered full Woods-Saxon channel features at once."""
+    rows = np.asarray(values, dtype=float)
+    if rows.ndim == 1:
+        rows = rows[np.newaxis, :]
+    if cache["potential_name"] != "full_woods-saxon":
+        return _generic_packed_effective_interaction_features(
+            emulator=emulator,
+            rows=rows,
+        )
+    shape = cache["evaluation_radii"].shape
+    radii = cache["evaluation_radii"].reshape(-1)
+    channel_ldots = np.repeat(cache["ldots"], shape[1])
+    raw = np.asarray(
+        [
+            full_woods_saxon(radii, row)
+            + channel_ldots * full_woods_saxon_spin_orbit(radii, row)
+            for row in rows
+        ],
+        dtype=np.complex128,
+    ).reshape(rows.shape[0], *shape)
+    raw /= cache["energy_scales"][np.newaxis, :, np.newaxis]
+    return (
+        raw - cache["centers"][np.newaxis, :, :]
+    ) / cache["scales"][np.newaxis, :, :]
+
+
 # ==========================================================================
 # rf
 # ==========================================================================
@@ -2054,6 +2103,7 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
     ell_slots = []
     spin_slots = []
     ldots = []
+    energy_scales = []
     rbes = []
     plus_channel_indices = []
     plus_ell_indices = []
@@ -2076,6 +2126,7 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
         spin_slots.append(spin_index)
         spin_orbit = getattr(interaction, "spin_orbit_term", None)
         ldots.append(float(getattr(spin_orbit, "l_dot_s", 0.0)))
+        energy_scales.append(float(interaction.energy))
         rbes.append(sae.rbes[ell][spin_index])
         if spin_index == 0:
             plus_channel_indices.append(offset)
@@ -2104,6 +2155,7 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
         "ell": np.asarray(ell_slots, dtype=int),
         "spin": np.asarray(spin_slots, dtype=int),
         "ldots": np.asarray(ldots, dtype=float),
+        "energy_scales": np.asarray(energy_scales, dtype=float),
         "centers": np.asarray(
             [predictors[channel].central_values for channel in channel_keys],
             dtype=np.complex128,
