@@ -163,6 +163,34 @@ def small_cross_section_emulator():
     return emulator
 
 
+def test_cross_section_cache_is_compiled_and_invalidated():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=3,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+
+    cache = emulator._packed_cross_section_cache
+    assert cache is not None
+    channel_count = len(emulator.rf_lrom)
+    assert cache["channel_keys"] == tuple(emulator.rf_lrom)
+    assert cache["centers"].shape == (channel_count, 3)
+    assert cache["matrices"].shape == (channel_count, 3, 2, 2)
+    assert cache["vectors"].shape == (channel_count, 3, 2)
+    assert cache["constants"].shape == (channel_count, 2)
+    assert cache["identity"].shape == (2, 2)
+    assert cache["evaluation_radii"].shape == (channel_count, 3)
+
+    original_cache = cache
+    emulator._clear_training_state()
+    assert emulator._packed_cross_section_cache is None
+    assert emulator._sae_cache is None
+    assert original_cache is not emulator._packed_cross_section_cache
+
+
 def test_effective_interaction_training_uses_one_feature_set_per_channel():
     emulator = small_cross_section_emulator()
 

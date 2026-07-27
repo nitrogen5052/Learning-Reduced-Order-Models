@@ -1203,6 +1203,42 @@ def features_for_values(
     return (raw - predictor.central_values[np.newaxis, :]) / predictor.scales[np.newaxis, :]
 
 
+def _prediction_interaction_space(*, emulator):
+    """Return the live or lazily reconstructed ROSE interaction space."""
+    if emulator.samples is not None:
+        return emulator.samples.interaction_space
+    interactions = emulator._portable_interaction_cache
+    if interactions is not None:
+        return interactions
+    rose = _import_rose()
+    options = {
+        "l_max": max(emulator.partial_waves),
+        "n_theta": len(emulator.parameter_names),
+        "mu": emulator.kinematics.mu,
+        "energy": emulator.kinematics.e_com,
+    }
+    if emulator.config.potential.name == "full_woods-saxon":
+        options.update(
+            coordinate_space_potential=_full_ws_interaction,
+            spin_orbit_term=_full_ws_spin_orbit,
+            is_complex=True,
+        )
+    elif emulator.config.potential.name == "woods-saxon":
+        options.update(
+            coordinate_space_potential=rose.koning_delaroche.KD_simple,
+            spin_orbit_term=rose.koning_delaroche.KD_simple_so,
+            is_complex=True,
+        )
+    else:
+        options.update(
+            coordinate_space_potential=_real_ws_interaction,
+            is_complex=False,
+        )
+    interactions = rose.InteractionSpace(**options)
+    emulator._portable_interaction_cache = interactions
+    return interactions
+
+
 def effective_interaction_features(
     *,
     emulator,
@@ -1228,36 +1264,7 @@ def effective_interaction_features(
                 [model.interaction.tilde(rho_points, row) for row in values]
             )
         else:
-            interactions = getattr(
-                emulator, "_portable_interaction_cache", None
-            )
-            if interactions is None:
-                rose = _import_rose()
-                options = {
-                    "l_max": max(emulator.partial_waves),
-                    "n_theta": len(emulator.parameter_names),
-                    "mu": emulator.kinematics.mu,
-                    "energy": emulator.kinematics.e_com,
-                }
-                if emulator.config.potential.name == "full_woods-saxon":
-                    options.update(
-                        coordinate_space_potential=_full_ws_interaction,
-                        spin_orbit_term=_full_ws_spin_orbit,
-                        is_complex=True,
-                    )
-                elif emulator.config.potential.name == "woods-saxon":
-                    options.update(
-                        coordinate_space_potential=rose.koning_delaroche.KD_simple,
-                        spin_orbit_term=rose.koning_delaroche.KD_simple_so,
-                        is_complex=True,
-                    )
-                else:
-                    options.update(
-                        coordinate_space_potential=_real_ws_interaction,
-                        is_complex=False,
-                    )
-                interactions = rose.InteractionSpace(**options)
-                emulator._portable_interaction_cache = interactions
+            interactions = _prediction_interaction_space(emulator=emulator)
             ell, spin_index = (
                 (channel, 0) if isinstance(channel, int) else channel
             )
@@ -2012,6 +2019,151 @@ def _scattering_amplitude_emulator(*, emulator):
     return sae
 
 
+def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
+    """Compile immutable arrays used by cross-section prediction."""
+    options = emulator.training_options or {}
+    if options.get("observable") != "cross_section":
+        raise LROMStateError(
+            "packed cross-section state requires cross-section training"
+        )
+    predictors = emulator.predictors
+    models = emulator.rf_lrom
+    if not isinstance(predictors, Mapping) or not models:
+        raise LROMStateError(
+            "packed cross-section state requires channel predictors"
+        )
+    channel_keys = tuple(models)
+    basis_size = models[channel_keys[0]].n_basis
+    predictor_count = models[channel_keys[0]].n_predictors
+    for channel in channel_keys:
+        model = models[channel]
+        predictor = predictors[channel]
+        if (
+            model.n_basis != basis_size
+            or model.n_predictors != predictor_count
+            or predictor.selected_indices.size != predictor_count
+        ):
+            raise ValueError(
+                f"inconsistent packed cross-section state for channel {channel}"
+            )
+
+    interactions = _prediction_interaction_space(emulator=emulator)
+    sae = _scattering_amplitude_emulator(emulator=emulator)
+    samples = emulator.samples
+    evaluation_radii = []
+    ell_slots = []
+    spin_slots = []
+    ldots = []
+    rbes = []
+    plus_channel_indices = []
+    plus_ell_indices = []
+    minus_channel_indices = []
+    minus_ell_indices = []
+    for offset, channel in enumerate(channel_keys):
+        ell, spin_index = (
+            (channel, 0) if isinstance(channel, int) else channel
+        )
+        interaction = interactions.interactions[ell][spin_index]
+        predictor = predictors[channel]
+        if samples is None:
+            rho_points = predictor.selected_radii * emulator.kinematics.k
+        else:
+            rho_points = samples.mesh.rho[predictor.selected_indices]
+        evaluation_radii.append(
+            np.asarray(rho_points, dtype=float) / float(interaction.k)
+        )
+        ell_slots.append(ell)
+        spin_slots.append(spin_index)
+        spin_orbit = getattr(interaction, "spin_orbit_term", None)
+        ldots.append(float(getattr(spin_orbit, "l_dot_s", 0.0)))
+        rbes.append(sae.rbes[ell][spin_index])
+        if spin_index == 0:
+            plus_channel_indices.append(offset)
+            plus_ell_indices.append(ell)
+            if ell == 0:
+                minus_channel_indices.append(offset)
+                minus_ell_indices.append(ell)
+        else:
+            minus_channel_indices.append(offset)
+            minus_ell_indices.append(ell)
+
+    constants = np.asarray(
+        [
+            np.zeros(basis_size, dtype=np.complex128)
+            if models[channel].constant_vector is None
+            else models[channel].constant_vector
+            for channel in channel_keys
+        ],
+        dtype=np.complex128,
+    )
+    return {
+        "channel_keys": channel_keys,
+        "partial_waves": tuple(emulator.partial_waves),
+        "potential_name": emulator.config.potential.name,
+        "evaluation_radii": np.asarray(evaluation_radii, dtype=float),
+        "ell": np.asarray(ell_slots, dtype=int),
+        "spin": np.asarray(spin_slots, dtype=int),
+        "ldots": np.asarray(ldots, dtype=float),
+        "centers": np.asarray(
+            [predictors[channel].central_values for channel in channel_keys],
+            dtype=np.complex128,
+        ),
+        "scales": np.asarray(
+            [predictors[channel].scales for channel in channel_keys],
+            dtype=float,
+        ),
+        "matrices": np.asarray(
+            [models[channel].matrices for channel in channel_keys],
+            dtype=np.complex128,
+        ),
+        "vectors": np.asarray(
+            [models[channel].vectors for channel in channel_keys],
+            dtype=np.complex128,
+        ),
+        "constants": constants,
+        "identity": np.eye(basis_size, dtype=np.complex128),
+        "asymptotic_values": np.asarray(
+            [rbe.asymptotic_vals for rbe in rbes],
+            dtype=np.complex128,
+        ),
+        "asymptotic_derivatives": np.asarray(
+            [rbe.asymptotic_ders for rbe in rbes],
+            dtype=np.complex128,
+        ),
+        "hminus": np.asarray(
+            [rbe.Hm for rbe in rbes], dtype=np.complex128
+        ),
+        "hplus": np.asarray(
+            [rbe.Hp for rbe in rbes], dtype=np.complex128
+        ),
+        "hminus_derivative": np.asarray(
+            [rbe.Hmp for rbe in rbes], dtype=np.complex128
+        ),
+        "hplus_derivative": np.asarray(
+            [rbe.Hpp for rbe in rbes], dtype=np.complex128
+        ),
+        "s0": np.asarray([rbe.s_0 for rbe in rbes], dtype=float),
+        "plus_channel_indices": np.asarray(
+            plus_channel_indices, dtype=int
+        ),
+        "plus_ell_indices": np.asarray(plus_ell_indices, dtype=int),
+        "minus_channel_indices": np.asarray(
+            minus_channel_indices, dtype=int
+        ),
+        "minus_ell_indices": np.asarray(minus_ell_indices, dtype=int),
+        "sae": sae,
+    }
+
+
+def _cross_section_cache(*, emulator) -> dict[str, Any]:
+    """Return the derived cross-section cache, compiling it once."""
+    if emulator._packed_cross_section_cache is None:
+        emulator._packed_cross_section_cache = _compile_cross_section_cache(
+            emulator=emulator
+        )
+    return emulator._packed_cross_section_cache
+
+
 def _cross_section_prediction(
     *,
     emulator,
@@ -2633,6 +2785,8 @@ class LROM:
         self._training_state: TrainingState | None = None
         self._prediction_state: Any = None
         self._sae_cache: Any = None
+        self._packed_cross_section_cache: dict[str, Any] | None = None
+        self._portable_interaction_cache: Any = None
         self._fom_provider: Any = None
         self._training_engine: Any = None
         self._inference_only = False
@@ -2753,6 +2907,7 @@ class LROM:
 
     def _clear_training_state(self) -> None:
         self._sae_cache = None
+        self._packed_cross_section_cache = None
         self._training_state = None
         self._clear_prediction_state()
 
@@ -2866,6 +3021,7 @@ class LROM:
         if not self.is_sampled:
             raise LROMStateError("call sampling() before train()")
         self._sae_cache = None
+        self._packed_cross_section_cache = None
         self._training_state = self._trainer().train(
             emulator=self,
             basis_size=basis_size,
@@ -2874,6 +3030,8 @@ class LROM:
             observable=observable,
             angles_degrees=angles_degrees,
         )
+        if observable == "cross_section":
+            _cross_section_cache(emulator=self)
         self._clear_prediction_state()
 
     def predict(

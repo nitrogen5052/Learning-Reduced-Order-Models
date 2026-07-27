@@ -39,10 +39,11 @@ Add a test using `small_cross_section_emulator()` that asserts:
 def test_cross_section_cache_is_compiled_and_invalidated() -> None:
     emulator = small_cross_section_emulator()
     emulator.train(
-        basis_sizes=2,
+        basis_size=2,
+        predictor="effective-interaction",
         predictor_count=3,
         observable="cross_section",
-        validate=False,
+        angles_degrees=np.linspace(10.0, 170.0, 9),
     )
 
     cache = emulator._packed_cross_section_cache
