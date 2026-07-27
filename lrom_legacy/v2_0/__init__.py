@@ -1203,6 +1203,39 @@ def features_for_values(
     return (raw - predictor.central_values[np.newaxis, :]) / predictor.scales[np.newaxis, :]
 
 
+def effective_interaction_features(
+    *,
+    emulator,
+    predictors: Mapping[Any, PredictorState],
+    values: np.ndarray,
+) -> dict[Any, np.ndarray]:
+    """Evaluate fitted channel interactions at their selected physical points."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 1:
+        values = values[np.newaxis, :]
+    samples = emulator.samples
+    if samples is None:
+        raise LROMStateError(
+            "effective-interaction prediction requires sampled channel state"
+        )
+    features = {}
+    for channel, predictor in predictors.items():
+        try:
+            model = samples.full_order_models[channel]
+        except KeyError as exc:
+            raise LROMStateError(
+                f"missing sampled interaction for channel {channel}"
+            ) from exc
+        rho_points = samples.mesh.rho[predictor.selected_indices]
+        raw = np.asarray(
+            [model.interaction.tilde(rho_points, row) for row in values]
+        )
+        features[channel] = (
+            raw - predictor.central_values[np.newaxis, :]
+        ) / predictor.scales[np.newaxis, :]
+    return features
+
+
 # ==========================================================================
 # rf
 # ==========================================================================
@@ -1631,7 +1664,7 @@ def _centered_basis(*, emulator, channel, basis_size: int) -> BasisState:
     )
 
 
-def _predictor(*, emulator, kind: str, count: int) -> PredictorState:
+def _predictor(*, emulator, kind: str, count: int) -> Any:
     samples = emulator.samples
     central = np.asarray(
         [emulator.central_parameters[name] for name in emulator.parameter_names]
@@ -1660,7 +1693,26 @@ def _predictor(*, emulator, kind: str, count: int) -> PredictorState:
             training_spin_orbit=samples.training_spin_orbit,
             testing_spin_orbit=samples.testing_spin_orbit,
         )
-    raise ValueError("predictor must be 'parameters' or 'potential'")
+    if kind == "effective-interaction":
+        return build_effective_interaction_predictors(
+            full_order_models=samples.full_order_models,
+            rho=samples.mesh.rho,
+            radius=samples.mesh.radius,
+            central_values=central,
+            training_values=samples.design.training.values,
+            testing_values=samples.design.testing.values,
+            predictor_count=count,
+            minimum_radius=0.5,
+        )
+    raise ValueError(
+        "predictor must be 'parameters', 'potential', or 'effective-interaction'"
+    )
+
+
+def _channel_features(predictor_features, channel) -> np.ndarray:
+    if isinstance(predictor_features, Mapping):
+        return predictor_features[channel]
+    return predictor_features
 
 
 def _evaluate(
@@ -1688,7 +1740,7 @@ def _evaluate(
         )
         lrom_coordinates = solve_rf_lrom(
             model=rf_models[channel],
-            predictors=predictor_features,
+            predictors=_channel_features(predictor_features, channel),
         )
         coefficient_sets["ls"][channel] = ls_coordinates
         coefficient_sets["lrom"][channel] = lrom_coordinates
@@ -1787,24 +1839,46 @@ class TrainingEngine:
             train_coordinates = project_coordinates(
                 basis=basis, wavefunctions=samples.training_wavefunctions[channel]
             )
+            training_features = (
+                predictor_state[channel].training_features
+                if isinstance(predictor_state, Mapping)
+                else predictor_state.training_features
+            )
             model = fit_rf_lrom(
-                predictors=predictor_state.training_features,
+                predictors=training_features,
                 coordinates=train_coordinates,
+                include_intercept=predictor == "effective-interaction",
             )
             rf_models[channel] = model
+        training_features = (
+            {
+                channel: state.training_features
+                for channel, state in predictor_state.items()
+            }
+            if isinstance(predictor_state, Mapping)
+            else predictor_state.training_features
+        )
+        testing_features = (
+            {
+                channel: state.testing_features
+                for channel, state in predictor_state.items()
+            }
+            if isinstance(predictor_state, Mapping)
+            else predictor_state.testing_features
+        )
         training_results = _evaluate(
             emulator=emulator,
             bases=bases,
             rf_models=rf_models,
             wavefunctions=samples.training_wavefunctions,
-            predictor_features=predictor_state.training_features,
+            predictor_features=training_features,
         )
         testing_results = _evaluate(
             emulator=emulator,
             bases=bases,
             rf_models=rf_models,
             wavefunctions=samples.testing_wavefunctions,
-            predictor_features=predictor_state.testing_features,
+            predictor_features=testing_features,
         )
         return TrainingState(
             basis=bases,
@@ -1971,14 +2045,24 @@ def predict(*, emulator, parameters) -> PredictionState:
     """Predict one or more named parameter cases from trained portable state."""
     values = _parameter_rows(emulator=emulator, parameters=parameters)
     predictor = emulator.predictors
-    features = features_for_values(
-        predictor=predictor,
-        values=values,
-        potential_function=emulator.config.potential.function,
-        spin_orbit_function=emulator.config.potential.spin_orbit_function,
-    )
+    if isinstance(predictor, Mapping):
+        features = effective_interaction_features(
+            emulator=emulator,
+            predictors=predictor,
+            values=values,
+        )
+    else:
+        features = features_for_values(
+            predictor=predictor,
+            values=values,
+            potential_function=emulator.config.potential.function,
+            spin_orbit_function=emulator.config.potential.spin_orbit_function,
+        )
     coefficients = {
-        channel: solve_rf_lrom(model=model, predictors=features)
+        channel: solve_rf_lrom(
+            model=model,
+            predictors=_channel_features(features, channel),
+        )
         for channel, model in emulator.rf_lrom.items()
     }
     wavefunctions = {

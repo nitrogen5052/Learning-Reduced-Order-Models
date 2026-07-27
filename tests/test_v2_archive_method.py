@@ -134,3 +134,47 @@ def test_zero_intercept_fit_preserves_zero_constant_vector():
     )
 
     assert np.array_equal(model.constant_vector, np.zeros(2))
+
+
+def small_cross_section_emulator():
+    emulator = v2.LROM(
+        target=(40, 20),
+        projectile=(1, 0),
+        lab_energy=14.1,
+        l=(0, 1),
+        potential="full_woods-saxon",
+    )
+    ranges = {
+        name: tuple(sorted((0.95 * value, 1.05 * value)))
+        for name, value in emulator.central_parameters.items()
+    }
+    emulator.sampling(
+        training_ranges=ranges,
+        testing_ranges=ranges,
+        training_size=24,
+        testing_size=6,
+        mesh_size=96,
+        strategy="latin_hypercube",
+        seed=1204,
+    )
+    return emulator
+
+
+def test_effective_interaction_training_uses_one_feature_set_per_channel():
+    emulator = small_cross_section_emulator()
+
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+    )
+
+    assert set(emulator.predictors) == set(emulator.rf_lrom)
+    assert all(
+        state.kind == "effective-interaction"
+        for state in emulator.predictors.values()
+    )
+    assert all(
+        np.linalg.norm(model.constant_vector) > 0.0
+        for model in emulator.rf_lrom.values()
+    )
