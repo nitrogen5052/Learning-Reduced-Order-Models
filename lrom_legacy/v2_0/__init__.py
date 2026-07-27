@@ -153,6 +153,60 @@ def full_woods_saxon_spin_orbit(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return vso / MASS_PION**2 * fprime / radius
 
 
+@njit
+def _full_woods_saxon_tilde_flat_kernel(
+    radii: np.ndarray,
+    ldots: np.ndarray,
+    energies: np.ndarray,
+    alpha: np.ndarray,
+) -> np.ndarray:
+    vv, wv, wd, vso, rv, rd, rso, av, ad, aso = alpha
+    result = np.empty(radii.size, dtype=np.complex128)
+    for index in range(radii.size):
+        radius = radii[index]
+        volume_exponent = min(max((radius - rv) / av, -700.0), 700.0)
+        surface_exponent = min(max((radius - rd) / ad, -700.0), 700.0)
+        volume = 1.0 / (1.0 + np.exp(volume_exponent))
+        surface_exp = np.exp(surface_exponent)
+        surface_prime = -(surface_exp / ad) / (1.0 + surface_exp) ** 2
+        central = (
+            -vv * volume
+            - 1j * wv * volume
+            + 4j * ad * wd * surface_prime
+        )
+        spin_exponent = min(
+            max((radius - rso) / aso, -700.0),
+            700.0,
+        )
+        spin_exp = np.exp(spin_exponent)
+        spin_prime = -(spin_exp / aso) / (1.0 + spin_exp) ** 2
+        spin_orbit = (
+            ldots[index]
+            * vso
+            / MASS_PION**2
+            * spin_prime
+            / radius
+        )
+        result[index] = (central + spin_orbit) / energies[index]
+    return result
+
+
+def _full_woods_saxon_tilde_flat(
+    *,
+    radii: np.ndarray,
+    ldots: np.ndarray,
+    energies: np.ndarray,
+    alpha: np.ndarray,
+) -> np.ndarray:
+    """Evaluate flattened channel effective interactions without dispatch."""
+    return _full_woods_saxon_tilde_flat_kernel(
+        radii,
+        ldots,
+        energies,
+        alpha,
+    )
+
+
 
 
 @dataclass(frozen=True)
@@ -1314,18 +1368,18 @@ def _packed_effective_interaction_features(
             emulator=emulator,
             rows=rows,
         )
-    shape = cache["evaluation_radii"].shape
-    radii = cache["evaluation_radii"].reshape(-1)
-    channel_ldots = np.repeat(cache["ldots"], shape[1])
     raw = np.asarray(
         [
-            full_woods_saxon(radii, row)
-            + channel_ldots * full_woods_saxon_spin_orbit(radii, row)
+            _full_woods_saxon_tilde_flat(
+                radii=cache["feature_radii"],
+                ldots=cache["feature_ldots"],
+                energies=cache["feature_energy_scales"],
+                alpha=row,
+            )
             for row in rows
         ],
         dtype=np.complex128,
-    ).reshape(rows.shape[0], *shape)
-    raw /= cache["energy_scales"][np.newaxis, :, np.newaxis]
+    ).reshape(rows.shape[0], *cache["feature_shape"])
     return (
         raw - cache["centers"][np.newaxis, :, :]
     ) / cache["scales"][np.newaxis, :, :]
@@ -2166,6 +2220,13 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
             minus_channel_indices.append(offset)
             minus_ell_indices.append(ell)
 
+    evaluation_radii_array = np.asarray(evaluation_radii, dtype=float)
+    ldots_array = np.asarray(ldots, dtype=float)
+    energy_scales_array = np.asarray(energy_scales, dtype=float)
+    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
+    angles_radians = np.deg2rad(angles_degrees)
+    if not np.array_equal(np.asarray(sae.angles), angles_radians):
+        raise ValueError("ROSE angle cache does not match the trained grid")
     constants = np.asarray(
         [
             np.zeros(basis_size, dtype=np.complex128)
@@ -2179,11 +2240,19 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
         "channel_keys": channel_keys,
         "partial_waves": tuple(emulator.partial_waves),
         "potential_name": emulator.config.potential.name,
-        "evaluation_radii": np.asarray(evaluation_radii, dtype=float),
+        "evaluation_radii": evaluation_radii_array,
         "ell": np.asarray(ell_slots, dtype=int),
         "spin": np.asarray(spin_slots, dtype=int),
-        "ldots": np.asarray(ldots, dtype=float),
-        "energy_scales": np.asarray(energy_scales, dtype=float),
+        "ldots": ldots_array,
+        "energy_scales": energy_scales_array,
+        "feature_shape": evaluation_radii_array.shape,
+        "feature_radii": evaluation_radii_array.reshape(-1),
+        "feature_ldots": np.repeat(
+            ldots_array, evaluation_radii_array.shape[1]
+        ),
+        "feature_energy_scales": np.repeat(
+            energy_scales_array, evaluation_radii_array.shape[1]
+        ),
         "centers": np.asarray(
             [predictors[channel].central_values for channel in channel_keys],
             dtype=np.complex128,
@@ -2231,6 +2300,8 @@ def _compile_cross_section_cache(*, emulator) -> dict[str, Any]:
             minus_channel_indices, dtype=int
         ),
         "minus_ell_indices": np.asarray(minus_ell_indices, dtype=int),
+        "angles_degrees": angles_degrees,
+        "angles_radians": angles_radians,
         "sae": sae,
     }
 
@@ -2250,17 +2321,27 @@ def _solve_packed_coordinates(
     cache: Mapping[str, Any],
 ) -> np.ndarray:
     """Solve every sample and channel RF system in one NumPy batch."""
-    systems = cache["identity"][np.newaxis, np.newaxis, :, :] + np.einsum(
-        "sck,ckij->scij",
-        features,
-        cache["matrices"],
-        optimize=True,
+    if features.shape[0] == 1:
+        row = features[0]
+        systems = cache["identity"][np.newaxis, :, :] + np.sum(
+            row[..., np.newaxis, np.newaxis] * cache["matrices"],
+            axis=1,
+        )
+        rhs = cache["constants"] + np.sum(
+            row[..., np.newaxis] * cache["vectors"],
+            axis=1,
+        )
+        solved = np.linalg.solve(systems, rhs[..., np.newaxis])[..., 0]
+        return solved[np.newaxis, :, :]
+    systems = cache["identity"][np.newaxis, np.newaxis, :, :] + np.sum(
+        features[..., np.newaxis, np.newaxis]
+        * cache["matrices"][np.newaxis, :, :, :, :],
+        axis=2,
     )
-    rhs = cache["constants"][np.newaxis, :, :] + np.einsum(
-        "sck,ckj->scj",
-        features,
-        cache["vectors"],
-        optimize=True,
+    rhs = cache["constants"][np.newaxis, :, :] + np.sum(
+        features[..., np.newaxis]
+        * cache["vectors"][np.newaxis, :, :, :],
+        axis=2,
     )
     return np.linalg.solve(systems, rhs[..., np.newaxis])[..., 0]
 
@@ -2271,6 +2352,46 @@ def _smatrix_from_packed_coordinates(
     cache: Mapping[str, Any],
 ) -> SmatrixState:
     """Convert packed reduced coordinates directly to S-matrix arrays."""
+    if coordinates.shape[0] == 1:
+        expansion = np.concatenate(
+            (
+                np.ones(
+                    (coordinates.shape[1], 1),
+                    dtype=np.complex128,
+                ),
+                coordinates[0],
+            ),
+            axis=1,
+        )
+        phi = np.sum(expansion * cache["asymptotic_values"], axis=1)
+        phi_prime = np.sum(
+            expansion * cache["asymptotic_derivatives"],
+            axis=1,
+        )
+        r_matrix = phi / (cache["s0"] * phi_prime)
+        s_flat = (
+            cache["hminus"]
+            - cache["s0"] * r_matrix * cache["hminus_derivative"]
+        ) / (
+            cache["hplus"]
+            - cache["s0"] * r_matrix * cache["hplus_derivative"]
+        )
+        splus = np.zeros(
+            len(cache["partial_waves"]),
+            dtype=np.complex128,
+        )
+        sminus = np.zeros_like(splus)
+        splus[cache["plus_ell_indices"]] = s_flat[
+            cache["plus_channel_indices"]
+        ]
+        sminus[cache["minus_ell_indices"]] = s_flat[
+            cache["minus_channel_indices"]
+        ]
+        return SmatrixState(
+            partial_waves=cache["partial_waves"],
+            splus=splus[np.newaxis, :],
+            sminus=sminus[np.newaxis, :],
+        )
     expansion = np.concatenate(
         (
             np.ones(
@@ -2281,17 +2402,13 @@ def _smatrix_from_packed_coordinates(
         ),
         axis=-1,
     )
-    phi = np.einsum(
-        "scb,cb->sc",
-        expansion,
-        cache["asymptotic_values"],
-        optimize=True,
+    phi = np.sum(
+        expansion * cache["asymptotic_values"][np.newaxis, :, :],
+        axis=2,
     )
-    phi_prime = np.einsum(
-        "scb,cb->sc",
-        expansion,
-        cache["asymptotic_derivatives"],
-        optimize=True,
+    phi_prime = np.sum(
+        expansion * cache["asymptotic_derivatives"][np.newaxis, :, :],
+        axis=2,
     )
     r_matrix = phi / (cache["s0"][np.newaxis, :] * phi_prime)
     s_flat = (
@@ -2330,12 +2447,20 @@ def _cross_sections_from_smatrix(
     smatrix: SmatrixState,
 ) -> CrossSectionState:
     """Assemble cross sections with the SAE's precomputed angle tables."""
-    options = emulator.training_options or {}
-    angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
-    angles = np.deg2rad(angles_degrees)
-    sae = _scattering_amplitude_emulator(emulator=emulator)
-    if not np.array_equal(np.asarray(sae.angles), angles):
-        raise ValueError("ROSE angle cache does not match the trained grid")
+    cache = emulator._packed_cross_section_cache
+    if cache is None:
+        options = emulator.training_options or {}
+        angles_degrees = np.asarray(
+            options.get("angles_degrees"),
+            dtype=float,
+        )
+        angles = np.deg2rad(angles_degrees)
+        sae = _scattering_amplitude_emulator(emulator=emulator)
+        if not np.array_equal(np.asarray(sae.angles), angles):
+            raise ValueError("ROSE angle cache does not match the trained grid")
+    else:
+        angles_degrees = cache["angles_degrees"]
+        sae = cache["sae"]
     cross_sections = [
         sae.calculate_xs(splus, sminus, row).dsdo
         for row, splus, sminus in zip(

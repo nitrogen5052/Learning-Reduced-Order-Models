@@ -319,6 +319,28 @@ def test_flattened_full_woods_saxon_features_match_reference():
     np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
 
 
+def test_flattened_full_woods_saxon_tilde_matches_component_formula():
+    radii = np.asarray([0.75, 2.5, 4.25])
+    ldots = np.asarray([0.0, 1.0, -2.0])
+    energies = np.asarray([13.75, 13.75, 13.75])
+    alpha = np.asarray(
+        [46.7, 1.7, 7.2, 6.1, 4.05, 4.40, 3.45, 0.67, 0.54, 0.60]
+    )
+    expected = (
+        v2.full_woods_saxon(radii, alpha)
+        + ldots * v2.full_woods_saxon_spin_orbit(radii, alpha)
+    ) / energies
+
+    actual = v2._full_woods_saxon_tilde_flat(
+        radii=radii,
+        ldots=ldots,
+        energies=energies,
+        alpha=alpha,
+    )
+
+    np.testing.assert_allclose(actual, expected, rtol=2e-15, atol=2e-15)
+
+
 def test_packed_features_fall_back_to_reference():
     emulator = small_cross_section_emulator()
     emulator.train(
@@ -520,6 +542,58 @@ def test_packed_smatrix_matches_scalar_channel_conversion():
                         rbe_row[1], coefficients[(ell, 1)][case_index]
                     ),
                 )
+
+
+def test_fast_packed_kernels_use_direct_contractions(monkeypatch):
+    options = []
+    sum_ranks = []
+    original_einsum = np.einsum
+    original_sum = np.sum
+
+    def einsum(*args, **kwargs):
+        options.append(kwargs.get("optimize", False))
+        return original_einsum(*args, **kwargs)
+
+    def array_sum(values, *args, **kwargs):
+        sum_ranks.append(np.asarray(values).ndim)
+        return original_sum(values, *args, **kwargs)
+
+    monkeypatch.setattr(v2.np, "einsum", einsum)
+    monkeypatch.setattr(v2.np, "sum", array_sum)
+    solve_cache = {
+        "identity": np.eye(1, dtype=np.complex128),
+        "matrices": np.ones((1, 1, 1, 1), dtype=np.complex128),
+        "vectors": np.ones((1, 1, 1), dtype=np.complex128),
+        "constants": np.zeros((1, 1), dtype=np.complex128),
+    }
+    coordinates = v2._solve_packed_coordinates(
+        features=np.ones((1, 1, 1), dtype=np.complex128),
+        cache=solve_cache,
+    )
+    smatrix_cache = {
+        "asymptotic_values": np.ones((1, 2), dtype=np.complex128),
+        "asymptotic_derivatives": np.asarray(
+            [[1.0, 2.0]], dtype=np.complex128
+        ),
+        "s0": np.ones(1),
+        "hminus": np.ones(1, dtype=np.complex128),
+        "hplus": np.full(1, 2.0, dtype=np.complex128),
+        "hminus_derivative": np.full(1, 0.5, dtype=np.complex128),
+        "hplus_derivative": np.full(1, 0.25, dtype=np.complex128),
+        "partial_waves": (0,),
+        "plus_ell_indices": np.asarray([0]),
+        "plus_channel_indices": np.asarray([0]),
+        "minus_ell_indices": np.asarray([0]),
+        "minus_channel_indices": np.asarray([0]),
+    }
+    result = v2._smatrix_from_packed_coordinates(
+        coordinates=coordinates,
+        cache=smatrix_cache,
+    )
+
+    assert np.all(np.isfinite(result.splus))
+    assert options == []
+    assert sum_ranks == [4, 3, 2, 2]
 
 
 def test_effective_interaction_artifact_round_trips_wavefunction_prediction(
