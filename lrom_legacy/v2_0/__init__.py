@@ -1214,6 +1214,7 @@ class RFLROMModel:
     residual_mse: float
     rank: int
     singular_values: np.ndarray
+    constant_vector: np.ndarray | None = None
 
     @property
     def n_basis(self) -> int:
@@ -1224,7 +1225,12 @@ class RFLROMModel:
         return int(self.vectors.shape[0])
 
 
-def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
+def fit(
+    *,
+    predictors: np.ndarray,
+    coordinates: np.ndarray,
+    include_intercept: bool = False,
+) -> RFLROMModel:
     """Fit the transformed implicit reduced equation by linear LS."""
     predictors = np.asarray(predictors, dtype=np.complex128)
     coordinates = np.asarray(coordinates, dtype=np.complex128)
@@ -1235,8 +1241,10 @@ def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
     sample_count, predictor_count = predictors.shape
     basis_size = coordinates.shape[1]
     block_size = basis_size * basis_size + basis_size
+    predictor_unknowns = predictor_count * block_size
+    intercept_unknowns = basis_size if include_intercept else 0
     design = np.zeros(
-        (sample_count * basis_size, predictor_count * block_size),
+        (sample_count * basis_size, predictor_unknowns + intercept_unknowns),
         dtype=np.complex128,
     )
     target = -coordinates.reshape(-1)
@@ -1252,6 +1260,8 @@ def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
                     equation, matrix_start : matrix_start + basis_size
                 ] = feature * coordinate_row
                 design[equation, offset + basis_size * basis_size + equation_row] = -feature
+            if include_intercept:
+                design[equation, predictor_unknowns + equation_row] = -1.0
     solution, _residuals, rank, singular_values = np.linalg.lstsq(
         design, target, rcond=None
     )
@@ -1268,12 +1278,18 @@ def fit(*, predictors: np.ndarray, coordinates: np.ndarray) -> RFLROMModel:
             offset + basis_size * basis_size : offset + block_size
         ]
     residual = design @ solution - target
+    constant_vector = (
+        solution[predictor_unknowns:]
+        if include_intercept
+        else np.zeros(basis_size, dtype=np.complex128)
+    )
     return RFLROMModel(
         matrices=matrices,
         vectors=vectors,
         residual_mse=float(np.mean(np.abs(residual) ** 2)),
         rank=int(rank),
         singular_values=singular_values,
+        constant_vector=constant_vector,
     )
 
 
@@ -1290,7 +1306,12 @@ def solve(*, model: RFLROMModel, predictors: np.ndarray) -> np.ndarray:
     )
     for index, row in enumerate(predictors):
         matrix = identity + np.einsum("k,kij->ij", row, model.matrices)
-        rhs = np.einsum("k,kj->j", row, model.vectors)
+        constant = (
+            np.zeros(model.n_basis, dtype=np.complex128)
+            if model.constant_vector is None
+            else np.asarray(model.constant_vector, dtype=np.complex128)
+        )
+        rhs = constant + np.einsum("k,kj->j", row, model.vectors)
         coordinates[index] = np.linalg.solve(matrix, rhs)
     return coordinates
 
