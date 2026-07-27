@@ -2216,6 +2216,85 @@ def _cross_section_cache(*, emulator) -> dict[str, Any]:
     return emulator._packed_cross_section_cache
 
 
+def _solve_packed_coordinates(
+    *,
+    features: np.ndarray,
+    cache: Mapping[str, Any],
+) -> np.ndarray:
+    """Solve every sample and channel RF system in one NumPy batch."""
+    systems = cache["identity"][np.newaxis, np.newaxis, :, :] + np.einsum(
+        "sck,ckij->scij",
+        features,
+        cache["matrices"],
+        optimize=True,
+    )
+    rhs = cache["constants"][np.newaxis, :, :] + np.einsum(
+        "sck,ckj->scj",
+        features,
+        cache["vectors"],
+        optimize=True,
+    )
+    return np.linalg.solve(systems, rhs[..., np.newaxis])[..., 0]
+
+
+def _smatrix_from_packed_coordinates(
+    *,
+    coordinates: np.ndarray,
+    cache: Mapping[str, Any],
+) -> SmatrixState:
+    """Convert packed reduced coordinates directly to S-matrix arrays."""
+    expansion = np.concatenate(
+        (
+            np.ones(
+                (*coordinates.shape[:-1], 1),
+                dtype=np.complex128,
+            ),
+            coordinates,
+        ),
+        axis=-1,
+    )
+    phi = np.einsum(
+        "scb,cb->sc",
+        expansion,
+        cache["asymptotic_values"],
+        optimize=True,
+    )
+    phi_prime = np.einsum(
+        "scb,cb->sc",
+        expansion,
+        cache["asymptotic_derivatives"],
+        optimize=True,
+    )
+    r_matrix = phi / (cache["s0"][np.newaxis, :] * phi_prime)
+    s_flat = (
+        cache["hminus"][np.newaxis, :]
+        - cache["s0"][np.newaxis, :]
+        * r_matrix
+        * cache["hminus_derivative"][np.newaxis, :]
+    ) / (
+        cache["hplus"][np.newaxis, :]
+        - cache["s0"][np.newaxis, :]
+        * r_matrix
+        * cache["hplus_derivative"][np.newaxis, :]
+    )
+    splus = np.zeros(
+        (coordinates.shape[0], len(cache["partial_waves"])),
+        dtype=np.complex128,
+    )
+    sminus = np.zeros_like(splus)
+    splus[:, cache["plus_ell_indices"]] = (
+        s_flat[:, cache["plus_channel_indices"]]
+    )
+    sminus[:, cache["minus_ell_indices"]] = (
+        s_flat[:, cache["minus_channel_indices"]]
+    )
+    return SmatrixState(
+        partial_waves=cache["partial_waves"],
+        splus=splus,
+        sminus=sminus,
+    )
+
+
 def _cross_section_prediction(
     *,
     emulator,

@@ -217,6 +217,8 @@ def test_packed_coefficients_match_individual_channel_solves():
         basis_size=2,
         predictor="effective-interaction",
         predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
     )
     values = emulator.samples.design.testing.values[:3]
     features = v2.effective_interaction_features(
@@ -238,6 +240,29 @@ def test_packed_coefficients_match_individual_channel_solves():
             predictors=features[channel],
         )
         assert np.allclose(packed[:, offset], scalar)
+
+    cache = v2._cross_section_cache(emulator=emulator)
+    packed_features = v2._packed_effective_interaction_features(
+        emulator=emulator,
+        values=values,
+        cache=cache,
+    )
+    actual = v2._solve_packed_coordinates(
+        features=packed_features,
+        cache=cache,
+    )
+    expected = np.stack(
+        [
+            v2.solve_rf_lrom(
+                model=emulator.rf_lrom[channel],
+                predictors=packed_features[:, channel_index, :],
+            )
+            for channel_index, channel in enumerate(cache["channel_keys"])
+        ],
+        axis=1,
+    )
+    assert actual.shape == (3, len(channels), 2)
+    np.testing.assert_allclose(actual, expected, rtol=2e-12, atol=2e-12)
 
 
 def test_flattened_full_woods_saxon_features_match_reference():
@@ -368,6 +393,24 @@ def test_packed_smatrix_matches_scalar_channel_conversion():
         emulator=emulator,
         sae=sae,
         coefficients=coefficients,
+    )
+    cache = v2._cross_section_cache(emulator=emulator)
+    packed_smatrix = v2._smatrix_from_packed_coordinates(
+        coordinates=packed_coefficients,
+        cache=cache,
+    )
+
+    np.testing.assert_allclose(
+        packed_smatrix.splus,
+        smatrix.splus,
+        rtol=2e-12,
+        atol=2e-12,
+    )
+    np.testing.assert_allclose(
+        packed_smatrix.sminus,
+        smatrix.sminus,
+        rtol=2e-12,
+        atol=2e-12,
     )
 
     for case_index in range(values.shape[0]):
