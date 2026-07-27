@@ -1979,46 +1979,102 @@ def _cross_section_prediction(
     values: np.ndarray,
     coefficients: Mapping[Any, np.ndarray],
 ) -> tuple[SmatrixState, CrossSectionState]:
-    samples = emulator.samples
     options = emulator.training_options or {}
     angles_degrees = np.asarray(options.get("angles_degrees"), dtype=float)
     angles = np.deg2rad(angles_degrees)
-    partial_waves = tuple(emulator.partial_waves)
     sae = _scattering_amplitude_emulator(emulator=emulator)
-    splus_rows = []
-    sminus_rows = []
-    cross_sections = []
-    for case_index, row in enumerate(values):
-        splus = np.zeros(len(partial_waves), dtype=np.complex128)
-        sminus = np.zeros(len(partial_waves), dtype=np.complex128)
-        for offset, channel in enumerate(partial_waves):
-            interaction_row = samples.interaction_space.interactions[channel]
-            plus_key = _interaction_channel_key(interaction_row, channel, 0)
-            splus[offset] = _s_matrix_from_coefficients(
-                sae.rbes[channel][0],
-                coefficients[plus_key][case_index],
-            )
-            if len(interaction_row) == 1:
-                sminus[offset] = splus[offset]
-            else:
-                minus_key = _interaction_channel_key(interaction_row, channel, 1)
-                sminus[offset] = _s_matrix_from_coefficients(
-                    sae.rbes[channel][1],
-                    coefficients[minus_key][case_index],
-                )
-        splus_rows.append(splus)
-        sminus_rows.append(sminus)
-        cross_sections.append(sae.calculate_xs(splus, sminus, row, angles=angles).dsdo)
+    smatrix = _packed_smatrix_from_coefficients(
+        emulator=emulator,
+        sae=sae,
+        coefficients=coefficients,
+    )
+    cross_sections = [
+        sae.calculate_xs(splus, sminus, row, angles=angles).dsdo
+        for row, splus, sminus in zip(
+            values, smatrix.splus, smatrix.sminus
+        )
+    ]
     return (
-        SmatrixState(
-            partial_waves=partial_waves,
-            splus=np.asarray(splus_rows),
-            sminus=np.asarray(sminus_rows),
-        ),
+        smatrix,
         CrossSectionState(
             angles_degrees=angles_degrees,
             values=np.asarray(cross_sections, dtype=float),
         ),
+    )
+
+
+def _packed_smatrix_from_coefficients(
+    *,
+    emulator,
+    sae,
+    coefficients: Mapping[Any, np.ndarray],
+) -> SmatrixState:
+    """Convert all channel coefficients directly to a packed S matrix."""
+    samples = emulator.samples
+    partial_waves = tuple(emulator.partial_waves)
+    channel_keys = []
+    rbes = []
+    ell_slots = []
+    spin_slots = []
+    for ell in partial_waves:
+        interaction_row = samples.interaction_space.interactions[ell]
+        for spin_index, rbe in enumerate(sae.rbes[ell]):
+            channel_keys.append(
+                _interaction_channel_key(interaction_row, ell, spin_index)
+            )
+            rbes.append(rbe)
+            ell_slots.append(ell)
+            spin_slots.append(spin_index)
+    coordinate_array = np.stack(
+        [coefficients[channel] for channel in channel_keys], axis=1
+    )
+    ones = np.ones(
+        (*coordinate_array.shape[:2], 1), dtype=np.complex128
+    )
+    expansion = np.concatenate([ones, coordinate_array], axis=2)
+    asymptotic_values = np.asarray(
+        [rbe.asymptotic_vals for rbe in rbes], dtype=np.complex128
+    )
+    asymptotic_derivatives = np.asarray(
+        [rbe.asymptotic_ders for rbe in rbes], dtype=np.complex128
+    )
+    phi = np.einsum(
+        "scb,cb->sc", expansion, asymptotic_values, optimize=True
+    )
+    phi_prime = np.einsum(
+        "scb,cb->sc", expansion, asymptotic_derivatives, optimize=True
+    )
+    s_0 = np.asarray([rbe.s_0 for rbe in rbes])
+    r_matrix = phi / (s_0[np.newaxis, :] * phi_prime)
+    s_flat = (
+        np.asarray([rbe.Hm for rbe in rbes])[np.newaxis, :]
+        - s_0[np.newaxis, :]
+        * r_matrix
+        * np.asarray([rbe.Hmp for rbe in rbes])[np.newaxis, :]
+    ) / (
+        np.asarray([rbe.Hp for rbe in rbes])[np.newaxis, :]
+        - s_0[np.newaxis, :]
+        * r_matrix
+        * np.asarray([rbe.Hpp for rbe in rbes])[np.newaxis, :]
+    )
+    splus = np.zeros(
+        (coordinate_array.shape[0], len(partial_waves)),
+        dtype=np.complex128,
+    )
+    sminus = np.zeros_like(splus)
+    for offset, (ell, spin_index) in enumerate(
+        zip(ell_slots, spin_slots)
+    ):
+        if spin_index == 0:
+            splus[:, ell] = s_flat[:, offset]
+            if ell == 0:
+                sminus[:, ell] = s_flat[:, offset]
+        else:
+            sminus[:, ell] = s_flat[:, offset]
+    return SmatrixState(
+        partial_waves=partial_waves,
+        splus=splus,
+        sminus=sminus,
     )
 
 
@@ -2040,8 +2096,57 @@ def _parameter_rows(*, emulator, parameters) -> np.ndarray:
     return values
 
 
+def _packed_coefficients(
+    *,
+    channels: Sequence[Any],
+    models: Mapping[Any, RFLROMModel],
+    features: Mapping[Any, np.ndarray],
+) -> np.ndarray:
+    """Solve equal-size channel RF systems as one NumPy batch."""
+    channels = tuple(channels)
+    if not channels:
+        raise ValueError("packed solve requires at least one channel")
+    basis_size = models[channels[0]].n_basis
+    predictor_count = models[channels[0]].n_predictors
+    for channel in channels:
+        model = models[channel]
+        if (
+            model.n_basis != basis_size
+            or model.n_predictors != predictor_count
+        ):
+            raise ValueError(
+                f"packed solve has inconsistent model size for channel {channel}"
+            )
+    matrices = np.asarray(
+        [models[channel].matrices for channel in channels]
+    )
+    vectors = np.asarray([models[channel].vectors for channel in channels])
+    constants = np.asarray(
+        [
+            np.zeros(basis_size, dtype=np.complex128)
+            if models[channel].constant_vector is None
+            else models[channel].constant_vector
+            for channel in channels
+        ]
+    )
+    feature_array = np.stack([features[channel] for channel in channels], axis=1)
+    identity = np.eye(basis_size, dtype=np.complex128)
+    systems = identity[np.newaxis, np.newaxis, :, :] + np.einsum(
+        "sck,ckij->scij", feature_array, matrices, optimize=True
+    )
+    rhs = constants[np.newaxis, :, :] + np.einsum(
+        "sck,ckj->scj", feature_array, vectors, optimize=True
+    )
+    return np.linalg.solve(systems, rhs[..., np.newaxis])[..., 0]
 
-def predict(*, emulator, parameters) -> PredictionState:
+
+
+def predict(
+    *,
+    emulator,
+    parameters,
+    reconstruct_wavefunctions: bool = True,
+) -> PredictionState:
     """Predict one or more named parameter cases from trained portable state."""
     values = _parameter_rows(emulator=emulator, parameters=parameters)
     predictor = emulator.predictors
@@ -2058,22 +2163,39 @@ def predict(*, emulator, parameters) -> PredictionState:
             potential_function=emulator.config.potential.function,
             spin_orbit_function=emulator.config.potential.spin_orbit_function,
         )
-    coefficients = {
-        channel: solve_rf_lrom(
-            model=model,
-            predictors=_channel_features(features, channel),
+    channels = tuple(emulator.rf_lrom)
+    if isinstance(features, Mapping):
+        packed = _packed_coefficients(
+            channels=channels,
+            models=emulator.rf_lrom,
+            features=features,
         )
-        for channel, model in emulator.rf_lrom.items()
-    }
-    wavefunctions = {
-        channel: reconstruct(
-            basis=emulator.basis[channel], coordinates=coordinates
+        coefficients = {
+            channel: packed[:, offset]
+            for offset, channel in enumerate(channels)
+        }
+    else:
+        coefficients = {
+            channel: solve_rf_lrom(model=model, predictors=features)
+            for channel, model in emulator.rf_lrom.items()
+        }
+    options = emulator.training_options or {}
+    if not reconstruct_wavefunctions and options.get("observable") != "cross_section":
+        raise LROMStateError(
+            "observable-only prediction requires cross_section training"
         )
-        for channel, coordinates in coefficients.items()
-    }
+    wavefunctions = (
+        {
+            channel: reconstruct(
+                basis=emulator.basis[channel], coordinates=coordinates
+            )
+            for channel, coordinates in coefficients.items()
+        }
+        if reconstruct_wavefunctions
+        else {}
+    )
     smatrix = None
     cross_sections = None
-    options = emulator.training_options or {}
     if options.get("observable") == "cross_section":
         smatrix, cross_sections = _cross_section_prediction(
             emulator=emulator,
@@ -2589,10 +2711,15 @@ class LROM:
         self,
         *,
         parameters: Mapping[str, float] | Sequence[Mapping[str, float]],
+        reconstruct_wavefunctions: bool = True,
     ) -> None:
         if not self.can_predict:
             raise LROMStateError("call train() before predict()")
-        self._prediction_state = predict(emulator=self, parameters=parameters)
+        self._prediction_state = predict(
+            emulator=self,
+            parameters=parameters,
+            reconstruct_wavefunctions=reconstruct_wavefunctions,
+        )
 
     def testing_case(self, *, case_id: str) -> TestingCase:
         if self._training_state is None or self._sampling_state is None:

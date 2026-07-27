@@ -178,3 +178,115 @@ def test_effective_interaction_training_uses_one_feature_set_per_channel():
         np.linalg.norm(model.constant_vector) > 0.0
         for model in emulator.rf_lrom.values()
     )
+
+
+def test_packed_coefficients_match_individual_channel_solves():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+    )
+    values = emulator.samples.design.testing.values[:3]
+    features = v2.effective_interaction_features(
+        emulator=emulator,
+        predictors=emulator.predictors,
+        values=values,
+    )
+    channels = tuple(emulator.rf_lrom)
+
+    packed = v2._packed_coefficients(
+        channels=channels,
+        models=emulator.rf_lrom,
+        features=features,
+    )
+
+    for offset, channel in enumerate(channels):
+        scalar = v2.solve_rf_lrom(
+            model=emulator.rf_lrom[channel],
+            predictors=features[channel],
+        )
+        assert np.allclose(packed[:, offset], scalar)
+
+
+def test_observable_only_prediction_matches_full_prediction():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    rows = [
+        dict(zip(emulator.parameter_names, row))
+        for row in emulator.samples.design.testing.values[:2]
+    ]
+
+    emulator.predict(parameters=rows, reconstruct_wavefunctions=True)
+    full = emulator.predictions
+    emulator.predict(parameters=rows, reconstruct_wavefunctions=False)
+    packed = emulator.predictions
+
+    assert packed.wavefunctions == {}
+    for channel in full.coefficients:
+        assert np.allclose(
+            full.coefficients[channel], packed.coefficients[channel]
+        )
+    assert np.allclose(full.smatrix.splus, packed.smatrix.splus)
+    assert np.allclose(full.smatrix.sminus, packed.smatrix.sminus)
+    assert np.allclose(
+        full.cross_sections.values, packed.cross_sections.values
+    )
+
+
+def test_packed_smatrix_matches_scalar_channel_conversion():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="effective-interaction",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+    values = emulator.samples.design.testing.values[:2]
+    features = v2.effective_interaction_features(
+        emulator=emulator,
+        predictors=emulator.predictors,
+        values=values,
+    )
+    channels = tuple(emulator.rf_lrom)
+    packed_coefficients = v2._packed_coefficients(
+        channels=channels,
+        models=emulator.rf_lrom,
+        features=features,
+    )
+    coefficients = {
+        channel: packed_coefficients[:, offset]
+        for offset, channel in enumerate(channels)
+    }
+    sae = v2._scattering_amplitude_emulator(emulator=emulator)
+
+    smatrix = v2._packed_smatrix_from_coefficients(
+        emulator=emulator,
+        sae=sae,
+        coefficients=coefficients,
+    )
+
+    for case_index in range(values.shape[0]):
+        for ell, rbe_row in enumerate(sae.rbes):
+            assert np.allclose(
+                smatrix.splus[case_index, ell],
+                v2._s_matrix_from_coefficients(
+                    rbe_row[0], coefficients[0 if ell == 0 else (ell, 0)][case_index]
+                ),
+            )
+            if ell == 0:
+                assert smatrix.sminus[case_index, ell] == smatrix.splus[case_index, ell]
+            else:
+                assert np.allclose(
+                    smatrix.sminus[case_index, ell],
+                    v2._s_matrix_from_coefficients(
+                        rbe_row[1], coefficients[(ell, 1)][case_index]
+                    ),
+                )
