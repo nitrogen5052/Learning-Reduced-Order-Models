@@ -135,6 +135,27 @@ def test_notebook02_results_contract() -> None:
     assert "def plot_" not in text
 
 
+def test_notebook_timing_reuses_initialized_online_paths() -> None:
+    for path in (NOTEBOOK_02, BENCHMARK_03):
+        text = notebook_text(path)
+        assert "TIMING_REPEATS = 3" in text
+        assert "TIMING_INNER_LOOPS = 20" in text
+        assert "time.perf_counter_ns()" in text
+        assert "1e9 * TIMING_INNER_LOOPS" in text
+        assert "sae.calculate_xs(splus, sminus, parameters)" in text
+        assert (
+            "sae.calculate_xs(\n"
+            "        splus,\n"
+            "        sminus,\n"
+            "        row,\n"
+            "        angles=ANGLES_RAD"
+        ) not in text
+
+    notebook_text_02 = notebook_text(NOTEBOOK_02)
+    assert "L_MAX = 3" in notebook_text_02
+    assert "LROM_BENCHMARK_L_MAX" not in notebook_text_02
+
+
 def test_benchmark03_notebook02_profile_contract() -> None:
     assert BENCHMARK_03.exists()
     text = notebook_text(BENCHMARK_03)
@@ -142,7 +163,9 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert '"reduced": (120, 30)' in text
     assert '"full": (200, 100)' in text
     assert "HALF_WIDTH = 0.20" in text
-    assert "L_MAX = 3" in text
+    assert "LROM_BENCHMARK_L_MAX" in text
+    assert 'L_MAX = int(os.environ.get("LROM_BENCHMARK_L_MAX", "3"))' in text
+    assert "if L_MAX not in (3, 10):" in text
     assert "BASIS_SIZES = (4, 6, 8)" in text
     assert "ROSE_EIM_SIZES = (4, 8, 12)" in text
     assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
