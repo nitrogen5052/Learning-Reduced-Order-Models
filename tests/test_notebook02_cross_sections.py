@@ -93,8 +93,15 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "emulate_dsdo" not in text
     assert "lrom.project_coordinates(" in text
     assert "lrom._cross_section_prediction(" in text
+    assert 'predictor="effective-interaction"' in text
+    assert "reconstruct_wavefunctions=False" in text
+    assert "median_pointwise_relative_error" in text
+    assert "maximum_over_angle_relative_error" in text
+    assert "old_v2_results" in text
+    assert "archive_lrom_results" in text
     assert "LS-projected cross section" in text
     assert "linear LROM" not in text
+    assert "np.median(pointwise_relative_error" in text
     assert "np.max(pointwise_relative_error" in text
 
 
@@ -111,7 +118,7 @@ def test_notebook02_results_contract() -> None:
         assert f"# FIGURE: {marker}" in text or f"# TABLE: {marker}" in text
     assert "selected_radii" in text
     assert "radius_mesh" in text
-    assert "radius_mask = radius_mesh >= 0.2" in text
+    assert "selected_radii >= 0.5" in text
     assert "combined_rank" in text
     assert "alpha selection A" in text
     assert "alpha selection B" in text
@@ -120,7 +127,7 @@ def test_notebook02_results_contract() -> None:
     assert "alpha_selection_table" in text
     assert "display(alpha_selection_table)" in text
     assert "one million evaluations/hour" in text
-    assert "10% maximum relative error" in text
+    assert "0.10 median pointwise relative error" in text
     assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
     assert "ax.set_ylim(bottom=PLOTTING_FLOOR)" not in text
     assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
@@ -147,7 +154,13 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "def cross_section_from_smatrix" in text
     assert "exact_dsdo" not in text
     assert "emulate_dsdo" not in text
-    assert "radius_mask = radius_mesh >= 0.2" in text
+    assert 'predictor="effective-interaction"' in text
+    assert "reconstruct_wavefunctions=False" in text
+    assert "median_pointwise_relative_error" in text
+    assert "maximum_over_angle_relative_error" in text
+    assert "old_v2_results" in text
+    assert "archive_lrom_results" in text
+    assert "selected_radii >= 0.5" in text
     assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
     assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
     assert "np.max(pointwise_relative_error" in text
