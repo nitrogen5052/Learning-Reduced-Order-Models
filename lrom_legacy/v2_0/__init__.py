@@ -990,6 +990,112 @@ def _greedy_maxvol_indices(basis: np.ndarray) -> np.ndarray:
     return np.asarray(selected, dtype=int)
 
 
+def _refined_maxvol_indices(
+    basis: np.ndarray,
+    *,
+    max_swaps: int = 50,
+    tolerance: float = 1e-10,
+) -> np.ndarray:
+    """Select informative rows with QR residuals and max-volume swaps."""
+    basis = np.asarray(basis)
+    if basis.ndim != 2 or basis.shape[1] > basis.shape[0]:
+        raise ValueError("maxvol basis must have shape (points, modes)")
+    if max_swaps < 0:
+        raise ValueError("max_swaps must be non-negative")
+    selected = [int(np.argmax(np.linalg.norm(basis, axis=1)))]
+    for _ in range(1, basis.shape[1]):
+        q, *_ = np.linalg.qr(basis[selected].T, mode="reduced")
+        residual = basis - (basis @ q) @ q.T.conj()
+        scores = np.linalg.norm(residual, axis=1)
+        scores[selected] = -np.inf
+        selected.append(int(np.argmax(scores)))
+    for _ in range(max_swaps):
+        try:
+            coefficients = basis @ np.linalg.inv(basis[selected])
+        except np.linalg.LinAlgError:
+            break
+        magnitudes = np.abs(coefficients)
+        magnitudes[selected, :] = 0.0
+        row, column = np.unravel_index(
+            np.argmax(magnitudes), magnitudes.shape
+        )
+        if magnitudes[row, column] <= 1.0 + tolerance:
+            break
+        selected[column] = int(row)
+    return np.asarray(sorted(selected), dtype=int)
+
+
+def build_effective_interaction_predictors(
+    *,
+    full_order_models: Mapping[Any, Any],
+    rho: np.ndarray,
+    radius: np.ndarray,
+    central_values: np.ndarray,
+    training_values: np.ndarray,
+    testing_values: np.ndarray,
+    predictor_count: int,
+    minimum_radius: float = 0.5,
+) -> dict[Any, PredictorState]:
+    """Build one archive-style effective-interaction predictor per channel."""
+    rho = np.asarray(rho, dtype=float)
+    radius = np.asarray(radius, dtype=float)
+    central_values = np.asarray(central_values, dtype=float)
+    training_values = np.asarray(training_values, dtype=float)
+    testing_values = np.asarray(testing_values, dtype=float)
+    if rho.ndim != 1 or radius.shape != rho.shape:
+        raise ValueError("rho and radius must be one-dimensional with equal size")
+    allowed = np.flatnonzero(radius >= minimum_radius)
+    if allowed.size < predictor_count:
+        raise ValueError("not enough allowed radii for predictor selection")
+    states = {}
+    for channel in sorted(full_order_models, key=_channel_sort_key):
+        interaction = full_order_models[channel].interaction
+        center = np.asarray(interaction.tilde(rho, central_values))
+        training = np.asarray(
+            [interaction.tilde(rho, row) for row in training_values]
+        )
+        testing = np.asarray(
+            [interaction.tilde(rho, row) for row in testing_values]
+        )
+        delta = (training - center[np.newaxis, :]).T
+        u, singular_values, _vh = np.linalg.svd(
+            delta[allowed], full_matrices=False
+        )
+        if predictor_count < 1 or predictor_count > min(u.shape):
+            raise ValueError(
+                f"predictor_count exceeds the available rank for channel {channel}"
+            )
+        local = _refined_maxvol_indices(u[:, :predictor_count])
+        selected = allowed[local]
+        raw_training = training[:, selected] - center[selected][np.newaxis, :]
+        scales = np.max(np.abs(raw_training), axis=0)
+        if np.any(scales <= 1e-14):
+            raise ValueError(
+                f"effective-interaction scale is zero for channel {channel}"
+            )
+        states[channel] = PredictorState(
+            kind="effective-interaction",
+            names=tuple(
+                f"Ueff[{channel}](r={radius[index]:.8g})"
+                for index in selected
+            ),
+            parameter_names=(),
+            parameter_indices=np.empty(0, dtype=int),
+            center=np.empty(0),
+            scales=scales,
+            training_features=raw_training / scales[np.newaxis, :],
+            testing_features=(
+                testing[:, selected] - center[selected][np.newaxis, :]
+            )
+            / scales[np.newaxis, :],
+            selected_indices=selected,
+            selected_radii=radius[selected],
+            central_values=center[selected],
+            singular_values=singular_values,
+        )
+    return states
+
+
 def build_potential_predictor(
     *,
     radius: np.ndarray,
