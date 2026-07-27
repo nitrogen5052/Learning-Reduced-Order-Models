@@ -3246,7 +3246,11 @@ class LROM:
             observable=observable,
             angles_degrees=angles_degrees,
         )
-        if observable == "cross_section":
+        if (
+            observable == "cross_section"
+            and self.config.potential.name == "full_woods-saxon"
+            and isinstance(self.predictors, Mapping)
+        ):
             _cross_section_cache(emulator=self)
         self._clear_prediction_state()
 

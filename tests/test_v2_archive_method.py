@@ -191,6 +191,27 @@ def test_cross_section_cache_is_compiled_and_invalidated():
     assert original_cache is not emulator._packed_cross_section_cache
 
 
+def test_shared_potential_cross_section_predictor_skips_packed_cache():
+    emulator = small_cross_section_emulator()
+    emulator.train(
+        basis_size=2,
+        predictor="potential",
+        predictor_count=2,
+        observable="cross_section",
+        angles_degrees=np.linspace(10.0, 170.0, 9),
+    )
+
+    assert emulator._packed_cross_section_cache is None
+    row = dict(
+        zip(
+            emulator.parameter_names,
+            emulator.samples.design.testing.values[0],
+        )
+    )
+    emulator.predict(parameters=row, reconstruct_wavefunctions=False)
+    assert np.all(np.isfinite(emulator.predictions.cross_sections.values))
+
+
 def test_effective_interaction_training_uses_one_feature_set_per_channel():
     emulator = small_cross_section_emulator()
 
