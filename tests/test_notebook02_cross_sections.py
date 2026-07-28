@@ -121,6 +121,28 @@ def test_notebook02_experiment_functions_are_extracted() -> None:
         )
 
 
+def test_notebook02_presentation_functions_are_extracted() -> None:
+    expected = {
+        "predictor_radius_figure",
+        "select_alpha_cases",
+        "representative_cross_section_figure",
+        "cross_section_error_figure",
+        "error_distribution_figure",
+        "summary_results_table",
+        "accuracy_time_figure",
+        "validation_results_table",
+    }
+    functions = notebook_functions(NOTEBOOK_02)
+    assert expected <= functions.keys()
+    for name in expected:
+        function = functions[name]
+        assert function.returns is not None
+        assert all(
+            argument.annotation is not None
+            for argument in function.args.args
+        )
+
+
 def test_notebook02_shell_contract() -> None:
     assert NOTEBOOK_02.exists()
     notebook = load_notebook(NOTEBOOK_02)
@@ -199,20 +221,26 @@ def test_notebook02_results_contract() -> None:
     assert "selected_radii" in text
     assert "radius_mesh" in text
     assert "selected_radii >= 0.5" in text
-    assert "combined_rank" in text
+    assert "def select_alpha_cases" in text
     assert "alpha selection A" in text
     assert "alpha selection B" in text
     assert "alpha selection C" in text
     assert "percentile" not in text.lower()
     assert "alpha_selection_table" in text
-    assert "display(alpha_selection_table)" in text
+    assert "display(alpha_cases)" in text
     assert "one million evaluations/hour" in text
-    assert "0.10 median pointwise relative error" in text
-    assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
-    assert "ax.set_ylim(bottom=PLOTTING_FLOOR)" not in text
-    assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
+    assert 'label=f"{error_reference:.2f} median pointwise error"' in text
+    assert "axes[0].set_ylim(bottom=plotting_floor)" in text
+    assert "marker_sizes = dict(zip(compression_values, (16, 28, 44)))" in text
     assert "bbox_to_anchor=(1.02, 1.0)" in text
-    assert "def plot_" not in text
+    for function_name in (
+        "predictor_radius_figure",
+        "representative_cross_section_figure",
+        "cross_section_error_figure",
+        "error_distribution_figure",
+        "accuracy_time_figure",
+    ):
+        assert f"def {function_name}" in text
 
 
 def test_notebook_timing_reuses_initialized_online_paths() -> None:
@@ -221,7 +249,6 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
         assert "TIMING_REPEATS = 3" in text
         assert "TIMING_INNER_LOOPS = 20" in text
         assert "time.perf_counter_ns()" in text
-        assert "1e9 * TIMING_INNER_LOOPS" in text
         assert "sae.calculate_xs(splus, sminus, parameters)" in text
         assert (
             "sae.calculate_xs(\n"
@@ -232,8 +259,10 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
         ) not in text
 
     notebook_text_02 = notebook_text(NOTEBOOK_02)
+    assert "1e9 * inner_loops" in notebook_text_02
     assert "L_MAX = 3" in notebook_text_02
     assert "LROM_BENCHMARK_L_MAX" not in notebook_text_02
+    assert "1e9 * TIMING_INNER_LOOPS" in notebook_text(BENCHMARK_03)
 
 
 def test_benchmark03_notebook02_profile_contract() -> None:
