@@ -1,6 +1,8 @@
 import ast
+import io
 import json
 from pathlib import Path
+import tokenize
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,13 +44,14 @@ def code_sources(path: Path) -> list[str]:
     ]
 
 
-def notebook_functions(path: Path) -> dict[str, ast.FunctionDef]:
-    functions = {}
-    for source in code_sources(path):
-        for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.FunctionDef):
-                functions[node.name] = node
-    return functions
+def cat_source(path: Path) -> str:
+    matches = [
+        source
+        for source in code_sources(path)
+        if "Computational Accuracy versus Time" in source
+    ]
+    assert len(matches) == 1
+    return matches[0]
 
 
 def test_notebook02_clean_shell_contract() -> None:
@@ -58,6 +61,17 @@ def test_notebook02_clean_shell_contract() -> None:
             isinstance(node, (ast.Import, ast.ImportFrom))
             for node in ast.walk(ast.parse(source))
         )
+
+    assert not any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for source in sources
+        for node in ast.walk(ast.parse(source))
+    )
+    assert not any(
+        token.type == tokenize.COMMENT
+        for source in sources
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+    )
 
     calls = [
         node
@@ -77,21 +91,26 @@ def test_notebook02_clean_shell_contract() -> None:
     text = notebook_text(NOTEBOOK_02)
     assert "rose_train_rows" not in text
     assert "rose_test_rows" not in text
-
-    expected = {
-        "parameter_dicts",
-        "time_lrom_predictions",
-        "build_sampled_study",
-    }
-    functions = notebook_functions(NOTEBOOK_02)
-    assert expected <= functions.keys()
-    for name in expected:
-        function = functions[name]
-        assert function.returns is not None
-        assert all(
-            argument.annotation is not None
-            for argument in function.args.args
-        )
+    for removed_import in (
+        "from typing import Any",
+        "import platform",
+        "from matplotlib.figure import Figure",
+        "from matplotlib.lines import Line2D",
+        "from matplotlib.patches import Patch",
+        "from scipy.special import",
+    ):
+        assert removed_import not in text
+    for retained_import in (
+        "from pathlib import Path",
+        "import sys",
+        "import time",
+        "import matplotlib.pyplot as plt",
+        "import numpy as np",
+        "import pandas as pd",
+        "import benchmark_helper",
+        "import lrom_legacy.v2_0 as lrom",
+    ):
+        assert retained_import in sources[0]
 
 
 def test_notebook02_uses_benchmark_helper_boundary() -> None:
@@ -116,28 +135,6 @@ def test_notebook02_uses_benchmark_helper_boundary() -> None:
         "lrom._cross_section_prediction(",
     ):
         assert implementation_detail not in text
-
-
-def test_notebook02_presentation_functions_are_extracted() -> None:
-    expected = {
-        "predictor_radius_figure",
-        "select_alpha_cases",
-        "representative_cross_section_figure",
-        "cross_section_error_figure",
-        "error_distribution_figure",
-        "summary_results_table",
-        "accuracy_time_figure",
-        "validation_results_table",
-    }
-    functions = notebook_functions(NOTEBOOK_02)
-    assert expected <= functions.keys()
-    for name in expected:
-        function = functions[name]
-        assert function.returns is not None
-        assert all(
-            argument.annotation is not None
-            for argument in function.args.args
-        )
 
 
 def test_notebook02_shell_contract() -> None:
@@ -207,19 +204,9 @@ def test_notebook02_scientific_core_contract() -> None:
 
 def test_notebook02_results_contract() -> None:
     text = notebook_text(NOTEBOOK_02)
-    for marker in (
-        "potential-predictor-rainbows",
-        "representative-cross-sections",
-        "cross-section-errors",
-        "error-violins",
-        "cat-plot",
-        "validation-summary",
-    ):
-        assert f"# FIGURE: {marker}" in text or f"# TABLE: {marker}" in text
     assert "selected_radii" in text
     assert "radius_mesh" in text
     assert "selected_radii >= 0.5" in text
-    assert "def select_alpha_cases" in text
     assert "alpha selection A" in text
     assert "alpha selection B" in text
     assert "alpha selection C" in text
@@ -227,18 +214,27 @@ def test_notebook02_results_contract() -> None:
     assert "alpha_selection_table" in text
     assert "display(alpha_cases)" in text
     assert "one million evaluations/hour" in text
-    assert 'label=f"{error_reference:.2f} median pointwise error"' in text
+    assert "median pointwise error" in text
     assert "axes[0].set_ylim(bottom=plotting_floor)" in text
-    assert "marker_sizes = dict(zip(compression_values, (16, 28, 44)))" in text
+    assert "compression_sizes = dict(zip(compression_values, (16, 28, 44)))" in text
     assert "bbox_to_anchor=(1.02, 1.0)" in text
-    for function_name in (
-        "predictor_radius_figure",
-        "representative_cross_section_figure",
-        "cross_section_error_figure",
-        "error_distribution_figure",
-        "accuracy_time_figure",
-    ):
-        assert f"def {function_name}" in text
+    assert 'set_title("Computational Accuracy versus Time")' in text
+    assert 'set_ylabel("maximum relative error over angle")' in text
+
+
+def test_notebook02_cat_uses_per_alpha_paper_encoding() -> None:
+    source = cat_source(NOTEBOOK_02)
+    assert 'result["test_seconds"]' in source
+    assert 'result["test_maximum_over_angle_error"]' in source
+    assert 'marker="s"' in source
+    assert 'marker="o"' in source
+    assert "color=colors[n_phi]" in source
+    assert 'facecolors="none"' not in source
+    assert "median_seconds" not in source
+    assert "median_error" not in source
+    assert 'set_ylabel("maximum relative error over angle")' in source
+    assert 'label="ROSE"' in source
+    assert 'label="LROM"' in source
 
 
 def test_notebook_timing_reuses_initialized_online_paths() -> None:
@@ -259,7 +255,7 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
     assert "emulator.calculate_xs(splus, sminus, row)" in (
         BENCHMARK_HELPER.read_text()
     )
-    assert "1e9 * inner_loops" in notebook_text_02
+    assert "1e9 * TIMING_INNER_LOOPS" in notebook_text_02
     assert "L_MAX = 3" in notebook_text_02
     assert "LROM_BENCHMARK_L_MAX" not in notebook_text_02
     assert "1e9 * inner_loops" in notebook_text(BENCHMARK_03)
