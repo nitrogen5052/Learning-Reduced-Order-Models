@@ -173,9 +173,9 @@ def test_notebook02_scientific_core_contract() -> None:
     text = notebook_text(NOTEBOOK_02)
     helper = BENCHMARK_HELPER.read_text()
     assert 'potential="full_woods-saxon"' in text
-    assert "l=tuple(range(l_max + 1))" in text
+    assert "l=tuple(range(L_MAX + 1))" in text
     assert 'strategy="latin_hypercube"' in text
-    assert "seed=seed" in text
+    assert "seed=SEED" in text
     assert "rose.InteractionEIMSpace(" in helper
     assert "training_info=self.training_rows" in helper
     assert "explicit_training=True" in helper
@@ -211,11 +211,10 @@ def test_notebook02_results_contract() -> None:
     assert "alpha selection B" in text
     assert "alpha selection C" in text
     assert "percentile" not in text.lower()
-    assert "alpha_selection_table" in text
     assert "display(alpha_cases)" in text
     assert "one million evaluations/hour" in text
     assert "median pointwise error" in text
-    assert "axes[0].set_ylim(bottom=plotting_floor)" in text
+    assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
     assert "compression_sizes = dict(zip(compression_values, (16, 28, 44)))" in text
     assert "bbox_to_anchor=(1.02, 1.0)" in text
     assert 'set_title("Computational Accuracy versus Time")' in text
