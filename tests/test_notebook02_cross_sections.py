@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 
@@ -38,6 +39,61 @@ def code_sources(path: Path) -> list[str]:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
+
+
+def notebook_functions(path: Path) -> dict[str, ast.FunctionDef]:
+    functions = {}
+    for source in code_sources(path):
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.FunctionDef):
+                functions[node.name] = node
+    return functions
+
+
+def test_notebook02_clean_shell_contract() -> None:
+    sources = code_sources(NOTEBOOK_02)
+    for source in sources[1:]:
+        assert not any(
+            isinstance(node, (ast.Import, ast.ImportFrom))
+            for node in ast.walk(ast.parse(source))
+        )
+
+    calls = [
+        node
+        for source in sources
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+    ]
+    assert not any(
+        isinstance(call.func, ast.Name) and call.func.id == "print"
+        for call in calls
+    )
+    assert not any(
+        isinstance(call.func, ast.Attribute) and call.func.attr == "head"
+        for call in calls
+    )
+
+    text = notebook_text(NOTEBOOK_02)
+    assert "rose_train_rows" not in text
+    assert "rose_test_rows" not in text
+
+    expected = {
+        "parameter_dicts",
+        "pointwise_relative_error",
+        "summarize_relative_error",
+        "time_lrom_predictions",
+        "time_rose_predictions",
+        "build_sampled_study",
+    }
+    functions = notebook_functions(NOTEBOOK_02)
+    assert expected <= functions.keys()
+    for name in expected:
+        function = functions[name]
+        assert function.returns is not None
+        assert all(
+            argument.annotation is not None
+            for argument in function.args.args
+        )
 
 
 def test_notebook02_shell_contract() -> None:
