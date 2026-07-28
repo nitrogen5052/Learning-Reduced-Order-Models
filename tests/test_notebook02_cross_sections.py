@@ -262,7 +262,7 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
     assert "1e9 * inner_loops" in notebook_text_02
     assert "L_MAX = 3" in notebook_text_02
     assert "LROM_BENCHMARK_L_MAX" not in notebook_text_02
-    assert "1e9 * TIMING_INNER_LOOPS" in notebook_text(BENCHMARK_03)
+    assert "1e9 * inner_loops" in notebook_text(BENCHMARK_03)
 
 
 def test_benchmark03_notebook02_profile_contract() -> None:
@@ -278,32 +278,49 @@ def test_benchmark03_notebook02_profile_contract() -> None:
     assert "BASIS_SIZES = (4, 6, 8)" in text
     assert "ROSE_EIM_SIZES = (4, 8, 12)" in text
     assert "LROM_PREDICTOR_COUNTS = (4, 8, 12)" in text
-    assert "training_info=rose_train_rows" in text
-    assert "explicit_training=True" in text
-    assert "rose.basis.CustomBasis(" in text
-    assert "def exact_smatrix_all_channels" in text
-    assert "def emulated_smatrix_all_channels" in text
-    assert "def cross_section_from_smatrix" in text
     assert "exact_dsdo" not in text
     assert "emulate_dsdo" not in text
     assert 'predictor="effective-interaction"' in text
     assert "reconstruct_wavefunctions=False" in text
-    assert "median_pointwise_relative_error" in text
-    assert "maximum_over_angle_relative_error" in text
+    assert "summarize_relative_error" in text
+    assert "median_over_angle_error" in text
+    assert "maximum_over_angle_error" in text
     assert "old_v2_results" in text
     assert "archive_lrom_results" in text
     assert "selected_radii >= 0.5" in text
+    assert 'f"l={L_MAX}, j=l-1/2: real"' in text
+    assert 'f"l={L_MAX}, j=l+1/2: real"' in text
     assert "axes[0].set_ylim(bottom=PLOTTING_FLOOR)" in text
     assert "compression_sizes = {4: 16, 8: 28, 12: 44}" in text
-    assert "np.max(pointwise_relative_error" in text
     assert "test_seconds" in text
     assert "LS-projected cross section" in text
     assert "alpha selection A" in text
     assert "alpha selection B" in text
     assert "alpha selection C" in text
     assert "percentile" not in text.lower()
-    assert "display(alpha_selection_table)" in text
+    assert "display(alpha_cases)" in text
     assert "linear LROM" not in text
+
+
+def test_benchmark03_uses_benchmark_helper_boundary() -> None:
+    text = notebook_text(BENCHMARK_03)
+    assert 'NOTEBOOKS = ROOT / "notebooks"' in text
+    assert "import benchmark_helper" in text
+    assert "CrossSectionBenchmark(" in text
+    assert ".run_rose(" in text
+    assert ".run_ls(" in text
+    for implementation_detail in (
+        "rose.InteractionEIMSpace(",
+        "rose.basis.CustomBasis(",
+        "def build_rose_bases",
+        "def build_rose_emulator",
+        "def exact_smatrix_all_channels",
+        "def emulated_smatrix_all_channels",
+        "def cross_section_from_smatrix",
+        "lrom.project_coordinates(",
+        "lrom._cross_section_prediction(",
+    ):
+        assert implementation_detail not in text
 
 
 def test_benchmark03_code_cells_compile() -> None:
