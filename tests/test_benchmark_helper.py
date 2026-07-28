@@ -259,3 +259,13 @@ def test_notebook01_uses_benchmark_helper() -> None:
     assert "InteractionEIMSpace(" not in text
     assert "CustomBasis(" not in text
     assert "ws3_selected_ids = tuple(case_ids[selected])" in text
+
+
+def test_notebook01_has_no_empty_code_cells() -> None:
+    notebook = json.loads(NOTEBOOK_01.read_text())
+    code_sources = (
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    )
+    assert all(source.strip() for source in code_sources)
