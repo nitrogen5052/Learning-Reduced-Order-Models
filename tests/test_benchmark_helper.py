@@ -247,3 +247,15 @@ def test_helper_follows_rose_guide_stage_order() -> None:
         text.index("def _cross_section", class_start),
     ]
     assert positions == sorted(positions)
+
+
+def test_notebook01_uses_benchmark_helper() -> None:
+    text = notebook_text(NOTEBOOK_01)
+    assert "import benchmark_helper" in text
+    assert "WavefunctionBenchmark(" in text
+    assert ".run(" in text
+    assert "import rose_helper" not in text
+    assert "least_squares_baseline(" not in text
+    assert "InteractionEIMSpace(" not in text
+    assert "CustomBasis(" not in text
+    assert "ws3_selected_ids = tuple(case_ids[selected])" in text
