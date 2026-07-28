@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_02 = ROOT / "notebooks" / "02_rose_vs_lrom_cross_sections.ipynb"
+BENCHMARK_HELPER = ROOT / "notebooks" / "benchmark_helper.py"
 BENCHMARK_03 = (
     ROOT / "notebooks" / "benchmark_notebooks" / "2.0" / "benchmark_03.ipynb"
 )
@@ -79,10 +80,7 @@ def test_notebook02_clean_shell_contract() -> None:
 
     expected = {
         "parameter_dicts",
-        "pointwise_relative_error",
-        "summarize_relative_error",
         "time_lrom_predictions",
-        "time_rose_predictions",
         "build_sampled_study",
     }
     functions = notebook_functions(NOTEBOOK_02)
@@ -96,29 +94,28 @@ def test_notebook02_clean_shell_contract() -> None:
         )
 
 
-def test_notebook02_experiment_functions_are_extracted() -> None:
-    expected = {
-        "build_rose_bases",
-        "build_rose_emulator",
-        "build_rose_emulators",
-        "exact_smatrix_all_channels",
-        "emulated_smatrix_all_channels",
-        "cross_section_from_smatrix",
-        "evaluate_fom_cross_sections",
-        "evaluate_old_lrom",
-        "evaluate_ls_oracle",
-        "evaluate_lrom_grid",
-        "evaluate_rose_grid",
-    }
-    functions = notebook_functions(NOTEBOOK_02)
-    assert expected <= functions.keys()
-    for name in expected:
-        function = functions[name]
-        assert function.returns is not None
-        assert all(
-            argument.annotation is not None
-            for argument in function.args.args
-        )
+def test_notebook02_uses_benchmark_helper_boundary() -> None:
+    text = notebook_text(NOTEBOOK_02)
+    assert "import benchmark_helper" in text
+    assert "CrossSectionBenchmark(" in text
+    assert ".run_rose(" in text
+    assert ".run_ls(" in text
+    for implementation_detail in (
+        "rose.InteractionEIMSpace(",
+        "rose.basis.CustomBasis(",
+        "def build_rose_bases",
+        "def build_rose_emulator",
+        "def build_rose_emulators",
+        "def exact_smatrix_all_channels",
+        "def emulated_smatrix_all_channels",
+        "def cross_section_from_smatrix",
+        "def evaluate_fom_cross_sections",
+        "def evaluate_ls_oracle",
+        "def evaluate_rose_grid",
+        "lrom.project_coordinates(",
+        "lrom._cross_section_prediction(",
+    ):
+        assert implementation_detail not in text
 
 
 def test_notebook02_presentation_functions_are_extracted() -> None:
@@ -177,23 +174,24 @@ def test_notebook02_code_cells_compile() -> None:
 
 def test_notebook02_scientific_core_contract() -> None:
     text = notebook_text(NOTEBOOK_02)
+    helper = BENCHMARK_HELPER.read_text()
     assert 'potential="full_woods-saxon"' in text
     assert "l=tuple(range(l_max + 1))" in text
     assert 'strategy="latin_hypercube"' in text
     assert "seed=seed" in text
-    assert "rose.InteractionEIMSpace(" in text
-    assert "training_info=training_rows" in text
-    assert "explicit_training=True" in text
-    assert "rose.basis.CustomBasis(" in text
-    assert "solutions=np.asarray(" in text
-    assert "free_reference = np.asarray(" in text
-    assert "def exact_smatrix_all_channels" in text
-    assert "def emulated_smatrix_all_channels" in text
-    assert "def cross_section_from_smatrix" in text
+    assert "rose.InteractionEIMSpace(" in helper
+    assert "training_info=self.training_rows" in helper
+    assert "explicit_training=True" in helper
+    assert "rose.basis.CustomBasis(" in helper
+    assert "solutions=np.asarray(" in helper
+    assert "def _free_reference" in helper
+    assert "def _exact_smatrix" in helper
+    assert "def _emulated_smatrix" in helper
+    assert "def _cross_section" in helper
     assert "exact_dsdo" not in text
     assert "emulate_dsdo" not in text
-    assert "lrom.project_coordinates(" in text
-    assert "lrom._cross_section_prediction(" in text
+    assert "lrom_v2.project_coordinates(" in helper
+    assert "lrom_v2._cross_section_prediction(" in helper
     assert 'predictor="effective-interaction"' in text
     assert "reconstruct_wavefunctions=False" in text
     assert "summarize_relative_error" in text
@@ -203,8 +201,8 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "archive_lrom_results" in text
     assert "LS-projected cross section" in text
     assert "linear LROM" not in text
-    assert "np.median(pointwise, axis=1)" in text
-    assert "np.max(pointwise, axis=1)" in text
+    assert "np.median(pointwise, axis=1)" in helper
+    assert "np.max(pointwise, axis=1)" in helper
 
 
 def test_notebook02_results_contract() -> None:
@@ -249,7 +247,6 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
         assert "TIMING_REPEATS = 3" in text
         assert "TIMING_INNER_LOOPS = 20" in text
         assert "time.perf_counter_ns()" in text
-        assert "sae.calculate_xs(splus, sminus, parameters)" in text
         assert (
             "sae.calculate_xs(\n"
             "        splus,\n"
@@ -259,6 +256,9 @@ def test_notebook_timing_reuses_initialized_online_paths() -> None:
         ) not in text
 
     notebook_text_02 = notebook_text(NOTEBOOK_02)
+    assert "emulator.calculate_xs(splus, sminus, row)" in (
+        BENCHMARK_HELPER.read_text()
+    )
     assert "1e9 * inner_loops" in notebook_text_02
     assert "L_MAX = 3" in notebook_text_02
     assert "LROM_BENCHMARK_L_MAX" not in notebook_text_02
