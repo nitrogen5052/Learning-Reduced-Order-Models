@@ -96,6 +96,31 @@ def test_notebook02_clean_shell_contract() -> None:
         )
 
 
+def test_notebook02_experiment_functions_are_extracted() -> None:
+    expected = {
+        "build_rose_bases",
+        "build_rose_emulator",
+        "build_rose_emulators",
+        "exact_smatrix_all_channels",
+        "emulated_smatrix_all_channels",
+        "cross_section_from_smatrix",
+        "evaluate_fom_cross_sections",
+        "evaluate_old_lrom",
+        "evaluate_ls_oracle",
+        "evaluate_lrom_grid",
+        "evaluate_rose_grid",
+    }
+    functions = notebook_functions(NOTEBOOK_02)
+    assert expected <= functions.keys()
+    for name in expected:
+        function = functions[name]
+        assert function.returns is not None
+        assert all(
+            argument.annotation is not None
+            for argument in function.args.args
+        )
+
+
 def test_notebook02_shell_contract() -> None:
     assert NOTEBOOK_02.exists()
     notebook = load_notebook(NOTEBOOK_02)
@@ -131,13 +156,11 @@ def test_notebook02_code_cells_compile() -> None:
 def test_notebook02_scientific_core_contract() -> None:
     text = notebook_text(NOTEBOOK_02)
     assert 'potential="full_woods-saxon"' in text
-    assert "l=tuple(range(L_MAX + 1))" in text
+    assert "l=tuple(range(l_max + 1))" in text
     assert 'strategy="latin_hypercube"' in text
-    assert "seed=SEED" in text
-    assert "np.array_equal(train_rows, rose_train_rows)" in text
-    assert "np.array_equal(test_rows, rose_test_rows)" in text
+    assert "seed=seed" in text
     assert "rose.InteractionEIMSpace(" in text
-    assert "training_info=rose_train_rows" in text
+    assert "training_info=training_rows" in text
     assert "explicit_training=True" in text
     assert "rose.basis.CustomBasis(" in text
     assert "solutions=np.asarray(" in text
@@ -151,14 +174,15 @@ def test_notebook02_scientific_core_contract() -> None:
     assert "lrom._cross_section_prediction(" in text
     assert 'predictor="effective-interaction"' in text
     assert "reconstruct_wavefunctions=False" in text
-    assert "median_pointwise_relative_error" in text
-    assert "maximum_over_angle_relative_error" in text
+    assert "summarize_relative_error" in text
+    assert "median_over_angle_error" in text
+    assert "maximum_over_angle_error" in text
     assert "old_v2_results" in text
     assert "archive_lrom_results" in text
     assert "LS-projected cross section" in text
     assert "linear LROM" not in text
-    assert "np.median(pointwise_relative_error" in text
-    assert "np.max(pointwise_relative_error" in text
+    assert "np.median(pointwise, axis=1)" in text
+    assert "np.max(pointwise, axis=1)" in text
 
 
 def test_notebook02_results_contract() -> None:
