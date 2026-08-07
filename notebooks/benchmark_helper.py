@@ -26,8 +26,14 @@ import lrom as lrom_v1
 import lrom_legacy.v2_0 as lrom_v2
 
 
+HBAR_C_MEV_FM = 197.3269804
+MASS_PION_INVERSE_FM = np.sqrt(0.5)
+
+
 @dataclass(frozen=True)
 class RoseWavefunctionResult:
+    """ROSE wavefunction benchmark state on shared training/testing rows."""
+
     emulator: Any
     basis: Any
     interaction: Any
@@ -41,6 +47,8 @@ class RoseWavefunctionResult:
 
 @dataclass(frozen=True)
 class LSWavefunctionResult:
+    """Exact least-squares coordinates and reconstructions in the LROM basis."""
+
     training_coefficients: np.ndarray
     testing_coefficients: np.ndarray
     training_wavefunctions: np.ndarray
@@ -49,12 +57,16 @@ class LSWavefunctionResult:
 
 @dataclass(frozen=True)
 class WavefunctionBenchmarkResult:
+    """Matched ROSE and least-squares wavefunction results."""
+
     rose: RoseWavefunctionResult
     ls: LSWavefunctionResult
 
 
 @dataclass(frozen=True)
 class RoseCrossSectionResult:
+    """ROSE emulator grid, exact references, and per-configuration summaries."""
+
     emulators: dict[tuple[int, int], Any]
     fom_training_cross_sections: np.ndarray
     fom_testing_cross_sections: np.ndarray
@@ -63,13 +75,17 @@ class RoseCrossSectionResult:
 
 @dataclass(frozen=True)
 class LSCrossSectionResult:
+    """Least-squares cross-section summaries keyed by wavefunction basis size."""
+
     results: dict[int, dict[str, np.ndarray]]
 
 
 @dataclass(frozen=True)
-class CrossSectionBenchmarkResult:
-    rose: RoseCrossSectionResult
-    ls: LSCrossSectionResult
+class LromCrossSectionResult:
+    """LROM summaries and the optionally captured predictor configuration."""
+
+    results: dict[tuple[int, int], dict[str, np.ndarray]]
+    predictors: Mapping[Any, Any] | None
 
 
 @njit
@@ -77,6 +93,7 @@ def rose_real_woods_saxon(
     radius: float,
     alpha: np.ndarray,
 ) -> complex:
+    """Return the real volume Woods-Saxon potential used by Notebook 01."""
     vv, rv, av = alpha
     return -vv / (1.0 + np.exp((radius - rv) / av))
 
@@ -86,6 +103,7 @@ def full_woods_saxon(
     radius: float,
     alpha: np.ndarray,
 ) -> complex:
+    """Return the complex central full Woods-Saxon interaction in MeV."""
     vv, wv, wd, _vso, rv, rd, _rso, av, ad, _aso = alpha
     volume = 1.0 / (1.0 + np.exp((radius - rv) / av))
     exponential = np.exp((radius - rd) / ad)
@@ -99,10 +117,42 @@ def full_woods_saxon_spin_orbit(
     alpha: np.ndarray,
     ldots: float,
 ) -> complex:
+    """Return the ROSE spin-orbit term in MeV for radius in fm.
+
+    ``ldots`` is ROSE's channel coefficient ``2 l.s``. The inverse-fm pion
+    scale gives ``(hbar / m_pi c)^2 = 2 fm^2`` before the two radial inverse
+    lengths from ``(1/r) d/dr`` are applied.
+    """
     _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = alpha
     exponential = np.exp((radius - rso) / aso)
     derivative = -(exponential / aso) / (1.0 + exponential) ** 2
-    return vso / 139.57039**2 * ldots * derivative / radius
+    return vso / MASS_PION_INVERSE_FM**2 * ldots * derivative / radius
+
+
+def centrifugal_barrier_mev(
+    radius_fm: np.ndarray,
+    *,
+    ell: int,
+    reduced_mass_mev: float,
+) -> np.ndarray:
+    """Return ``hbar^2 ell(ell+1) / (2 mu r^2)`` in MeV.
+
+    Parameters use physical radius in fm and reduced rest energy ``mu c^2``
+    in MeV, matching the kinematic convention used by the LROM emulator.
+    """
+    radius = np.asarray(radius_fm, dtype=float)
+    if np.any(radius <= 0.0):
+        raise ValueError("radius_fm must contain only positive radii")
+    if ell < 0:
+        raise ValueError("ell must be nonnegative")
+    if reduced_mass_mev <= 0.0:
+        raise ValueError("reduced_mass_mev must be positive")
+    return (
+        HBAR_C_MEV_FM**2
+        * ell
+        * (ell + 1)
+        / (2.0 * reduced_mass_mev * radius**2)
+    )
 
 
 def pointwise_relative_error(
@@ -110,6 +160,7 @@ def pointwise_relative_error(
     reference: np.ndarray,
     denominator_floor: float,
 ) -> np.ndarray:
+    """Return raw absolute relative differences without a logarithmic transform."""
     denominator = np.maximum(np.abs(reference), denominator_floor)
     return np.abs(np.asarray(predicted) - np.asarray(reference)) / denominator
 
@@ -119,6 +170,7 @@ def summarize_relative_error(
     reference: np.ndarray,
     denominator_floor: float,
 ) -> dict[str, np.ndarray]:
+    """Reduce each case's raw pointwise errors over the angle dimension."""
     pointwise = pointwise_relative_error(
         predicted,
         reference,
@@ -130,7 +182,132 @@ def summarize_relative_error(
     }
 
 
+def cross_section_result(
+    training_cross_sections: np.ndarray,
+    testing_cross_sections: np.ndarray,
+    fom_training_cross_sections: np.ndarray,
+    fom_testing_cross_sections: np.ndarray,
+    *,
+    denominator_floor: float,
+    test_seconds: np.ndarray | None = None,
+) -> dict[str, np.ndarray]:
+    """Build one raw cross-section and relative-error result record."""
+    training = np.asarray(training_cross_sections)
+    testing = np.asarray(testing_cross_sections)
+    fom_training = np.asarray(fom_training_cross_sections)
+    fom_testing = np.asarray(fom_testing_cross_sections)
+    if training.shape != fom_training.shape:
+        raise ValueError("training and FOM cross-section shapes differ")
+    if testing.shape != fom_testing.shape:
+        raise ValueError("testing and FOM cross-section shapes differ")
+    if training.ndim != 2 or testing.ndim != 2:
+        raise ValueError("cross-section arrays must have shape (cases, angles)")
+    training_error = summarize_relative_error(
+        training,
+        fom_training,
+        denominator_floor,
+    )
+    testing_error = summarize_relative_error(
+        testing,
+        fom_testing,
+        denominator_floor,
+    )
+    result = {
+        "train_xs": training,
+        "test_xs": testing,
+        "train_median_over_angle_error": training_error[
+            "median_over_angle_error"
+        ],
+        "test_median_over_angle_error": testing_error[
+            "median_over_angle_error"
+        ],
+        "train_maximum_over_angle_error": training_error[
+            "maximum_over_angle_error"
+        ],
+        "test_maximum_over_angle_error": testing_error[
+            "maximum_over_angle_error"
+        ],
+    }
+    if test_seconds is not None:
+        seconds = np.asarray(test_seconds, dtype=float)
+        if seconds.shape != (testing.shape[0],):
+            raise ValueError("test_seconds must contain one value per testing case")
+        result["test_seconds"] = seconds
+    return result
+
+
+def validate_configuration_grid(
+    results: Mapping[tuple[int, int], Any],
+    *,
+    basis_sizes: tuple[int, ...],
+    compression_sizes: tuple[int, ...],
+    label: str,
+) -> None:
+    """Require a complete Cartesian configuration grid without extra keys."""
+    expected = {
+        (basis_size, compression_size)
+        for basis_size in basis_sizes
+        for compression_size in compression_sizes
+    }
+    if set(results) != expected:
+        missing = sorted(expected - set(results))
+        extra = sorted(set(results) - expected)
+        raise ValueError(
+            f"{label} configuration grid is incomplete: "
+            f"missing={missing}, extra={extra}"
+        )
+
+
+def validate_partial_wave_topology(
+    channel_rows: list[list[Any]],
+    *,
+    l_max: int,
+) -> tuple[int, ...]:
+    """Validate inclusive partial-wave and spin-orbit channel coverage.
+
+    ROSE stores one ``ell=0`` channel and two channels for each positive
+    partial wave, corresponding to the two allowed total-angular-momentum
+    branches.
+    """
+    if l_max < 0:
+        raise ValueError("l_max must be nonnegative")
+    counts = tuple(len(row) for row in channel_rows)
+    if len(counts) != l_max + 1:
+        raise ValueError(
+            "partial waves must provide inclusive ell=0,...,l_max coverage"
+        )
+    if counts[0] != 1:
+        raise ValueError("ell=0 must contain exactly one channel")
+    for ell, count in enumerate(counts[1:], start=1):
+        if count != 2:
+            raise ValueError(f"ell={ell} must contain exactly two spin channels")
+    return counts
+
+
+def validate_predictor_radii(
+    displayed: Mapping[Any, Any],
+    trained: Mapping[Any, Any],
+) -> dict[Any, np.ndarray]:
+    """Validate exact physical-radius parity for displayed/trained predictors."""
+    if set(displayed) != set(trained):
+        raise ValueError("displayed and trained predictor channel keys differ")
+    validated: dict[Any, np.ndarray] = {}
+    for channel in displayed:
+        shown = np.sort(np.asarray(displayed[channel].selected_radii, dtype=float))
+        fitted = np.sort(np.asarray(trained[channel].selected_radii, dtype=float))
+        if shown.ndim != 1 or fitted.ndim != 1:
+            raise ValueError(f"channel {channel!r} selected radii must be one-dimensional")
+        if not np.all(np.isfinite(shown)) or not np.all(np.isfinite(fitted)):
+            raise ValueError(f"channel {channel!r} selected radii must be finite")
+        if not np.array_equal(shown, fitted):
+            raise ValueError(f"channel {channel!r} selected radii differ")
+        validated[channel] = shown
+    return validated
+
+
 class WavefunctionBenchmark:
+    """Construct matched Notebook 01 ROSE and least-squares comparisons."""
+
     def __init__(
         self,
         emulator: Any,
@@ -203,6 +380,7 @@ class WavefunctionBenchmark:
         eim_basis_size: int = 8,
         include_training_wavefunctions: bool = True,
     ) -> RoseWavefunctionResult:
+        """Build and evaluate one ROSE reduced wavefunction emulator."""
         samples = self.emulator.samples
         training_rows = samples.design.training.values
         testing_rows = samples.design.testing.values
@@ -244,6 +422,7 @@ class WavefunctionBenchmark:
         )
 
     def run_ls(self) -> LSWavefunctionResult:
+        """Project exact wavefunctions into the fixed LROM basis."""
         samples = self.emulator.samples
         training_coefficients, training_wavefunctions = (
             lrom_v1.least_squares_baseline(
@@ -270,6 +449,7 @@ class WavefunctionBenchmark:
         eim_basis_size: int = 8,
         include_training_wavefunctions: bool = True,
     ) -> WavefunctionBenchmarkResult:
+        """Return the matched ROSE and least-squares wavefunction results."""
         rose_result = self.run_rose(
             basis_size=basis_size,
             eim_basis_size=eim_basis_size,
@@ -281,7 +461,9 @@ class WavefunctionBenchmark:
         )
 
 
-class CrossSectionBenchmark:
+class RoseCrossSectionPipeline:
+    """Self-contained ROSE cross-section construction and evaluation."""
+
     def __init__(
         self,
         emulator: Any,
@@ -483,49 +665,12 @@ class CrossSectionBenchmark:
             seconds.append(min(repeats))
         return np.asarray(seconds)
 
-    def _result(
-        self,
-        training_cross_sections: np.ndarray,
-        testing_cross_sections: np.ndarray,
-        fom_training_cross_sections: np.ndarray,
-        fom_testing_cross_sections: np.ndarray,
-        test_seconds: np.ndarray | None = None,
-    ) -> dict[str, np.ndarray]:
-        training_error = summarize_relative_error(
-            training_cross_sections,
-            fom_training_cross_sections,
-            self.denominator_floor,
-        )
-        testing_error = summarize_relative_error(
-            testing_cross_sections,
-            fom_testing_cross_sections,
-            self.denominator_floor,
-        )
-        result = {
-            "train_xs": training_cross_sections,
-            "test_xs": testing_cross_sections,
-            "train_median_over_angle_error": training_error[
-                "median_over_angle_error"
-            ],
-            "test_median_over_angle_error": testing_error[
-                "median_over_angle_error"
-            ],
-            "train_maximum_over_angle_error": training_error[
-                "maximum_over_angle_error"
-            ],
-            "test_maximum_over_angle_error": testing_error[
-                "maximum_over_angle_error"
-            ],
-        }
-        if test_seconds is not None:
-            result["test_seconds"] = test_seconds
-        return result
-
-    def run_rose(
+    def run(
         self,
         basis_sizes: tuple[int, ...],
         eim_sizes: tuple[int, ...],
     ) -> RoseCrossSectionResult:
+        """Build and evaluate the full ROSE configuration grid."""
         emulators = {}
         for basis_size in basis_sizes:
             for eim_size in eim_sizes:
@@ -557,13 +702,20 @@ class CrossSectionBenchmark:
                 self.testing_rows,
                 exact=False,
             )
-            results[config] = self._result(
+            results[config] = cross_section_result(
                 training,
                 testing,
                 fom_training,
                 fom_testing,
-                self._rose_times(emulator),
+                denominator_floor=self.denominator_floor,
+                test_seconds=self._rose_times(emulator),
             )
+        validate_configuration_grid(
+            results,
+            basis_sizes=basis_sizes,
+            compression_sizes=eim_sizes,
+            label="ROSE",
+        )
         return RoseCrossSectionResult(
             emulators=emulators,
             fom_training_cross_sections=fom_training,
@@ -571,35 +723,183 @@ class CrossSectionBenchmark:
             results=results,
         )
 
-    def _run_ls_for_basis(
+
+class LromCrossSectionStudy:
+    """Train and evaluate parked-v2 LROM and least-squares cross sections."""
+
+    def __init__(
         self,
-        basis_size: int,
-        predictor_count: int,
+        *,
+        emulator: Any,
+        training_cases: list[dict[str, float]],
+        testing_cases: list[dict[str, float]],
+        training_rows: np.ndarray,
+        testing_rows: np.ndarray,
         fom_training_cross_sections: np.ndarray,
         fom_testing_cross_sections: np.ndarray,
+        angles_degrees: np.ndarray,
+        denominator_floor: float,
+        timing_repeats: int,
+        timing_inner_loops: int,
+    ) -> None:
+        self.emulator = emulator
+        self.training_cases = training_cases
+        self.testing_cases = testing_cases
+        self.training_rows = np.asarray(training_rows, dtype=float)
+        self.testing_rows = np.asarray(testing_rows, dtype=float)
+        self.fom_training_cross_sections = np.asarray(
+            fom_training_cross_sections
+        )
+        self.fom_testing_cross_sections = np.asarray(fom_testing_cross_sections)
+        self.angles_degrees = np.asarray(angles_degrees, dtype=float)
+        self.denominator_floor = denominator_floor
+        self.timing_repeats = timing_repeats
+        self.timing_inner_loops = timing_inner_loops
+        if len(self.training_cases) != self.training_rows.shape[0]:
+            raise ValueError("training cases and rows require equal lengths")
+        if len(self.testing_cases) != self.testing_rows.shape[0]:
+            raise ValueError("testing cases and rows require equal lengths")
+        if timing_repeats < 1 or timing_inner_loops < 1:
+            raise ValueError("timing controls must be positive")
+
+    def _predict_cross_sections(
+        self,
+        cases: list[dict[str, float]],
+    ) -> np.ndarray:
+        self.emulator.predict(
+            parameters=cases,
+            reconstruct_wavefunctions=False,
+        )
+        return self.emulator.predictions.cross_sections.values.copy()
+
+    def _prediction_times(self) -> np.ndarray:
+        self.emulator.predict(
+            parameters=self.testing_cases[:1],
+            reconstruct_wavefunctions=False,
+        )
+        seconds = []
+        for case in self.testing_cases:
+            measurements = []
+            for _ in range(self.timing_repeats):
+                start = time.perf_counter_ns()
+                for _ in range(self.timing_inner_loops):
+                    self.emulator.predict(
+                        parameters=case,
+                        reconstruct_wavefunctions=False,
+                    )
+                measurements.append(
+                    (time.perf_counter_ns() - start)
+                    / (1e9 * self.timing_inner_loops)
+                )
+            seconds.append(min(measurements))
+        return np.asarray(seconds)
+
+    def _train_and_evaluate(
+        self,
+        *,
+        basis_size: int,
+        predictor: str,
+        operator_count: int,
+    ) -> dict[str, np.ndarray]:
+        self.emulator.train(
+            basis_size=basis_size,
+            predictor=predictor,
+            predictor_count=operator_count,
+            observable="cross_section",
+            angles_degrees=self.angles_degrees,
+        )
+        test_seconds = self._prediction_times()
+        training = self._predict_cross_sections(self.training_cases)
+        testing = self._predict_cross_sections(self.testing_cases)
+        return cross_section_result(
+            training,
+            testing,
+            self.fom_training_cross_sections,
+            self.fom_testing_cross_sections,
+            denominator_floor=self.denominator_floor,
+            test_seconds=test_seconds,
+        )
+
+    def run_lrom(
+        self,
+        *,
+        basis_sizes: tuple[int, ...],
+        operator_counts: tuple[int, ...],
+        capture_predictors_at: tuple[int, int],
+    ) -> LromCrossSectionResult:
+        """Evaluate the learned effective-interaction operator grid."""
+        results = {}
+        captured_predictors = None
+        for basis_size in basis_sizes:
+            for operator_count in operator_counts:
+                key = (basis_size, operator_count)
+                results[key] = self._train_and_evaluate(
+                    basis_size=basis_size,
+                    predictor="effective-interaction",
+                    operator_count=operator_count,
+                )
+                if key == capture_predictors_at:
+                    captured_predictors = self.emulator.predictors
+        validate_configuration_grid(
+            results,
+            basis_sizes=basis_sizes,
+            compression_sizes=operator_counts,
+            label="LROM",
+        )
+        if captured_predictors is None:
+            raise ValueError("capture_predictors_at is outside the LROM grid")
+        return LromCrossSectionResult(
+            results=results,
+            predictors=captured_predictors,
+        )
+
+    def run_parked_v2_reference(
+        self,
+        *,
+        basis_size: int,
+        operator_count: int,
+    ) -> LromCrossSectionResult:
+        """Evaluate the parked-v2 potential-predictor reference once."""
+        key = (basis_size, operator_count)
+        return LromCrossSectionResult(
+            results={
+                key: self._train_and_evaluate(
+                    basis_size=basis_size,
+                    predictor="potential",
+                    operator_count=operator_count,
+                )
+            },
+            predictors=None,
+        )
+
+    def _run_ls_for_basis(
+        self,
+        *,
+        basis_size: int,
+        operator_count: int,
     ) -> dict[str, np.ndarray]:
         self.emulator.train(
             basis_size=basis_size,
             predictor="effective-interaction",
-            predictor_count=predictor_count,
+            predictor_count=operator_count,
             observable="cross_section",
             angles_degrees=self.angles_degrees,
         )
         training_coordinates = {
             channel: lrom_v2.project_coordinates(
                 basis=self.emulator.basis[channel],
-                wavefunctions=(
-                    self.emulator.samples.training_wavefunctions[channel]
-                ),
+                wavefunctions=self.emulator.samples.training_wavefunctions[
+                    channel
+                ],
             )
             for channel in self.emulator.basis
         }
         testing_coordinates = {
             channel: lrom_v2.project_coordinates(
                 basis=self.emulator.basis[channel],
-                wavefunctions=(
-                    self.emulator.samples.testing_wavefunctions[channel]
-                ),
+                wavefunctions=self.emulator.samples.testing_wavefunctions[
+                    channel
+                ],
             )
             for channel in self.emulator.basis
         }
@@ -613,53 +913,27 @@ class CrossSectionBenchmark:
             values=self.testing_rows,
             coefficients=testing_coordinates,
         )
-        return self._result(
+        return cross_section_result(
             training_state.values.copy(),
             testing_state.values.copy(),
-            fom_training_cross_sections,
-            fom_testing_cross_sections,
+            self.fom_training_cross_sections,
+            self.fom_testing_cross_sections,
+            denominator_floor=self.denominator_floor,
         )
 
     def run_ls(
         self,
+        *,
         basis_sizes: tuple[int, ...],
-        fom_training_cross_sections: np.ndarray,
-        fom_testing_cross_sections: np.ndarray,
-        predictor_count: int,
+        operator_count: int,
     ) -> LSCrossSectionResult:
+        """Evaluate the held-out-wavefunction least-squares oracle."""
         return LSCrossSectionResult(
             results={
                 basis_size: self._run_ls_for_basis(
-                    basis_size,
-                    predictor_count,
-                    fom_training_cross_sections,
-                    fom_testing_cross_sections,
+                    basis_size=basis_size,
+                    operator_count=operator_count,
                 )
                 for basis_size in basis_sizes
             }
-        )
-
-    def run(
-        self,
-        basis_sizes: tuple[int, ...],
-        eim_sizes: tuple[int, ...],
-        ls_predictor_count: int,
-    ) -> CrossSectionBenchmarkResult:
-        rose_result = self.run_rose(
-            basis_sizes=basis_sizes,
-            eim_sizes=eim_sizes,
-        )
-        ls_result = self.run_ls(
-            basis_sizes=basis_sizes,
-            fom_training_cross_sections=(
-                rose_result.fom_training_cross_sections
-            ),
-            fom_testing_cross_sections=(
-                rose_result.fom_testing_cross_sections
-            ),
-            predictor_count=ls_predictor_count,
-        )
-        return CrossSectionBenchmarkResult(
-            rose=rose_result,
-            ls=ls_result,
         )

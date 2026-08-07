@@ -100,7 +100,9 @@ def real_woods_saxon(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return -vv / (1.0 + np.exp(exponent))
 
 
-MASS_PION = 139.57039  # MeV, sets the conventional spin-orbit scale
+# ROSE expresses the pion mass in inverse femtometers so that
+# 1 / MASS_PION**2 = (hbar / m_pi c)**2 = 2 fm**2.
+MASS_PION = np.sqrt(0.5)
 
 FULL_WOODS_SAXON_PARAMETER_NAMES = (
     "Vv", "Wv", "Wd", "Vso", "Rv", "Rd", "Rso", "av", "ad", "aso",
@@ -144,7 +146,11 @@ def full_woods_saxon(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
 
 
 def full_woods_saxon_spin_orbit(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
-    """Radial spin-orbit form factor (the l.s factor is applied per channel)."""
+    """Return the radial spin-orbit form factor in MeV.
+
+    Radius is measured in fm. The channel-specific value of ``2 l.s`` is
+    applied separately by the interaction builder.
+    """
     radius = np.asarray(r, dtype=float)
     _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = np.asarray(alpha, dtype=float)
     exponent = np.clip((radius - rso) / aso, -700.0, 700.0)
@@ -1558,10 +1564,9 @@ def _full_ws_interaction(r: np.ndarray, alpha: np.ndarray) -> np.ndarray:
 
 @njit
 def _full_ws_spin_orbit(r: np.ndarray, alpha: np.ndarray, ldots: float) -> np.ndarray:
-    # matches ROSE thomas form: (1/r) d/dr f, physical 1/r retained
+    # ROSE Thomas form: (hbar/m_pi c)^2 (1/r) d f/dr in physical fm.
     _vv, _wv, _wd, vso, _rv, _rd, rso, _av, _ad, aso = alpha
-    mass_pion = 139.57039
-    return vso / mass_pion**2 * ldots * _ws_shape_prime(r, rso, aso) / r
+    return vso / MASS_PION**2 * ldots * _ws_shape_prime(r, rso, aso) / r
 
 
 
