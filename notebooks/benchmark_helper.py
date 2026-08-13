@@ -258,6 +258,37 @@ def validate_configuration_grid(
         )
 
 
+def select_configurations(
+    *,
+    basis_sizes: tuple[int, ...],
+    compression_sizes: tuple[int, ...],
+    configurations: tuple[tuple[int, int], ...] | None,
+) -> tuple[tuple[int, int], ...]:
+    """Return an ordered full grid or a validated requested subset."""
+    available = {
+        (basis_size, compression_size)
+        for basis_size in basis_sizes
+        for compression_size in compression_sizes
+    }
+    selected = (
+        tuple(
+            (basis_size, compression_size)
+            for basis_size in basis_sizes
+            for compression_size in compression_sizes
+        )
+        if configurations is None
+        else tuple(configurations)
+    )
+    if not selected:
+        raise ValueError("at least one configuration is required")
+    if len(set(selected)) != len(selected):
+        raise ValueError("configurations must not contain duplicates")
+    unavailable = set(selected) - available
+    if unavailable:
+        raise ValueError(f"configurations are outside the requested sizes: {sorted(unavailable)}")
+    return selected
+
+
 def validate_partial_wave_topology(
     channel_rows: list[list[Any]],
     *,
@@ -669,17 +700,22 @@ class RoseCrossSectionPipeline:
         self,
         basis_sizes: tuple[int, ...],
         eim_sizes: tuple[int, ...],
+        configurations: tuple[tuple[int, int], ...] | None = None,
     ) -> RoseCrossSectionResult:
-        """Build and evaluate the full ROSE configuration grid."""
+        """Build and evaluate the requested ROSE configurations."""
+        selected = select_configurations(
+            basis_sizes=basis_sizes,
+            compression_sizes=eim_sizes,
+            configurations=configurations,
+        )
         emulators = {}
-        for basis_size in basis_sizes:
-            for eim_size in eim_sizes:
-                interaction = self._interaction_space(eim_size)
-                bases = self._custom_bases(interaction, basis_size)
-                emulators[(basis_size, eim_size)] = (
-                    self._scattering_emulator(interaction, bases)
-                )
-        reference = emulators[(basis_sizes[0], eim_sizes[0])]
+        for basis_size, eim_size in selected:
+            interaction = self._interaction_space(eim_size)
+            bases = self._custom_bases(interaction, basis_size)
+            emulators[(basis_size, eim_size)] = self._scattering_emulator(
+                interaction, bases
+            )
+        reference = emulators[selected[0]]
         fom_training = self._cross_sections(
             reference,
             self.training_rows,
@@ -710,12 +746,8 @@ class RoseCrossSectionPipeline:
                 denominator_floor=self.denominator_floor,
                 test_seconds=self._rose_times(emulator),
             )
-        validate_configuration_grid(
-            results,
-            basis_sizes=basis_sizes,
-            compression_sizes=eim_sizes,
-            label="ROSE",
-        )
+        if set(results) != set(selected):
+            raise ValueError("ROSE results do not match requested configurations")
         return RoseCrossSectionResult(
             emulators=emulators,
             fom_training_cross_sections=fom_training,
@@ -826,26 +858,27 @@ class LromCrossSectionStudy:
         basis_sizes: tuple[int, ...],
         operator_counts: tuple[int, ...],
         capture_predictors_at: tuple[int, int],
+        configurations: tuple[tuple[int, int], ...] | None = None,
     ) -> LromCrossSectionResult:
-        """Evaluate the learned effective-interaction operator grid."""
-        results = {}
-        captured_predictors = None
-        for basis_size in basis_sizes:
-            for operator_count in operator_counts:
-                key = (basis_size, operator_count)
-                results[key] = self._train_and_evaluate(
-                    basis_size=basis_size,
-                    predictor="effective-interaction",
-                    operator_count=operator_count,
-                )
-                if key == capture_predictors_at:
-                    captured_predictors = self.emulator.predictors
-        validate_configuration_grid(
-            results,
+        """Evaluate the requested learned effective-interaction configurations."""
+        selected = select_configurations(
             basis_sizes=basis_sizes,
             compression_sizes=operator_counts,
-            label="LROM",
+            configurations=configurations,
         )
+        results = {}
+        captured_predictors = None
+        for basis_size, operator_count in selected:
+            key = (basis_size, operator_count)
+            results[key] = self._train_and_evaluate(
+                basis_size=basis_size,
+                predictor="effective-interaction",
+                operator_count=operator_count,
+            )
+            if key == capture_predictors_at:
+                captured_predictors = self.emulator.predictors
+        if set(results) != set(selected):
+            raise ValueError("LROM results do not match requested configurations")
         if captured_predictors is None:
             raise ValueError("capture_predictors_at is outside the LROM grid")
         return LromCrossSectionResult(
