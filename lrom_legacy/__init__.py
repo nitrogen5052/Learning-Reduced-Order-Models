@@ -8,8 +8,11 @@ Module names encode versions (`1.2` is not a valid Python identifier):
 - `v2_0`: the first, parked cross-section attempt. Superseded by the 2.0
   work in the active `lrom` package; kept as the parts donor. Known flaws:
   spin-orbit-blind potential predictors and noisy CAT timing.
+- `v3_0`: `v2_0` plus cross-section assembly from externally supplied channel
+  bases and reduced coordinates, for studies that span several physical
+  systems. Every 2.0 entry point is preserved unchanged.
 
 The active package is the top-level single-file `lrom`.
 """
 
-__all__ = ["v1_2", "v2_0"]
+__all__ = ["v1_2", "v2_0", "v3_0"]
