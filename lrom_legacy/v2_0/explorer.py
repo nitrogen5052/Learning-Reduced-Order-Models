@@ -527,7 +527,7 @@ _INTERFACE_HTML = """
     <div class="view-controls">
       <label><input type="checkbox" data-view="central-lrom"> Central LROM</label>
       <label id="central-fom-control"><input type="checkbox" data-view="central-fom-evaluation"> Central FOM Evaluation</label>
-      <label><input type="checkbox" data-view="potential-inset"> Potential inset</label>
+      <label><input type="checkbox" data-view="potential-inset"> Potential figure</label>
     </div>
     <div class="button-row">
       <button type="button" id="reset-center">Reset Center</button>
