@@ -10,7 +10,6 @@ import tempfile
 from typing import Mapping
 
 import numpy as np
-from plotly.offline import get_plotlyjs
 
 from . import (
     MASS_PION,
@@ -125,103 +124,161 @@ _MODEL_CACHE_KEYS = (
     "angles_degrees",
 )
 
-_PLOTLY_JS = get_plotlyjs()
 _HTML_DATA_MARKER = "__LROM_HTML_DATA__"
 _BASE_CSS = """
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
-  color: #162033;
-  background: #fff;
+  --ink: #111827;
+  --muted: #6b7280;
+  --line: #d1d5db;
+  --blue: #1d4ed8;
+  --green: #047857;
+  --paper: #ffffff;
+  --soft: #f8fafc;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: #fff; color: #162033; }
+body { margin: 0; background: var(--paper); color: var(--ink); }
 button, input { font: inherit; }
-#explorer { min-height: 100vh; padding: 1.25rem; }
+#explorer { width: min(1500px, calc(100vw - 44px)); margin: 24px auto 42px; }
 .explorer-header {
   display: flex;
+  align-items: end;
   justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #cbd5e1;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
 }
-.explorer-header h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); }
-.explorer-header p, .explorer-footer { margin: .35rem 0 0; color: #667085; }
+.explorer-header h1 { margin: 0; font-size: 34px; font-weight: 760; letter-spacing: 0; }
+.explorer-header p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
 .integrated-card {
-  min-width: 17rem;
-  padding: .75rem 1rem;
-  border: 1px solid #cbd5e1;
-  border-radius: .55rem;
-  background: #f8fafc;
+  min-width: 280px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--soft);
 }
-.integrated-card span { display: block; color: #667085; }
-.integrated-card strong { display: block; margin-top: .25rem; font-size: 1.55rem; }
+.integrated-card span { display: block; color: var(--muted); font-size: 15px; margin-bottom: 5px; }
+.integrated-card strong { display: block; font-size: 28px; font-variant-numeric: tabular-nums; }
 .explorer-grid {
   display: grid;
-  grid-template-columns: minmax(18rem, 23rem) minmax(0, 1fr);
-  gap: 1rem;
-  margin-top: 1rem;
+  grid-template-columns: 360px 1fr;
+  gap: 22px;
+  align-items: start;
 }
 .control-panel, .plot-panel {
-  border: 1px solid #cbd5e1;
-  border-radius: .55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   background: #fff;
 }
-.control-panel { padding: .8rem; }
-.parameter-group { margin: 0; padding: 0; border: 0; }
-.parameter-group + .parameter-group { margin-top: .7rem; padding-top: .7rem; border-top: 1px solid #e2e8f0; }
+.control-panel { padding: 14px 14px 10px; }
+.parameter-group { margin: 7px 0 0; padding: 0; border: 0; }
 .parameter-group legend {
-  padding: 0;
+  padding: 12px 0 3px;
+  width: 100%;
+  border-top: 1px solid #dbe4ef;
   color: #475569;
-  font-weight: 750;
-  letter-spacing: .08em;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.slider-row { padding: .45rem 0; }
-.slider-label { display: flex; justify-content: space-between; gap: .75rem; font-weight: 650; }
-.slider-row input[type="range"] { width: 100%; accent-color: #2563eb; }
-.slider-bounds { display: flex; justify-content: space-between; color: #667085; font-size: .8rem; }
-.view-controls { margin-top: .8rem; padding-top: .7rem; border-top: 1px solid #e2e8f0; }
-.view-controls label { display: block; margin: .35rem 0; }
-.button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
-button {
-  padding: .5rem .7rem;
-  border: 1px solid #cbd5e1;
-  border-radius: .4rem;
-  color: #162033;
-  background: #fff;
-  cursor: pointer;
+.parameter-group:first-child { margin-top: 0; }
+.parameter-group:first-child legend { border-top: none; padding-top: 3px; }
+.slider-row { padding: 10px 0 12px; border-bottom: 1px solid #eef2f7; }
+.slider-row:last-child { border-bottom: none; }
+.slider-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
   font-weight: 650;
+  font-size: 14px;
+}
+.slider-label output {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #1f2937;
+}
+.slider-row input[type="range"] { width: 100%; accent-color: var(--blue); }
+.slider-bounds {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.view-controls {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #dbe4ef;
+}
+.view-controls label { display: block; margin: .3rem 0; font-size: 14px; font-weight: 650; }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 4px; }
+button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 8px 11px;
+  font-weight: 650;
+  cursor: pointer;
 }
 button:hover { background: #f1f5f9; }
-.status, .error { min-height: 1.3rem; margin-top: .65rem; font-size: .9rem; }
+.status, .error { min-height: 1.3rem; margin-top: .55rem; font-size: .9rem; }
 .status { color: #9a3412; }
 .error { color: #b91c1c; }
-.plot-panel { position: relative; min-width: 0; padding: .5rem; }
-#cross-section-plot { width: 100%; min-height: 43rem; }
-.potential-card {
-  position: absolute;
-  z-index: 2;
-  top: 5.5rem;
-  right: 3rem;
-  width: min(26rem, 42%);
-  padding: .35rem;
-  border: 1px solid #cbd5e1;
-  border-radius: .5rem;
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 .2rem .7rem rgba(15, 23, 42, .08);
+.plot-panel { min-width: 0; padding: 12px; }
+svg#cross-section-plot {
+  display: block;
+  width: 100%;
+  height: min(74vh, 760px);
+  min-height: 520px;
 }
-#potential-plot { width: 100%; min-height: 19rem; }
-.explorer-footer { padding: 1rem .25rem 0; }
+.axis text { fill: #374151; font-size: 13px; }
+.axis path, .axis line, .grid line { stroke: #cbd5e1; stroke-width: 1; }
+.grid line { opacity: 0.7; }
+.curve { fill: none; stroke-width: 4.6; }
+.reference { fill: none; stroke-width: 3; stroke-dasharray: 7 5; opacity: 0.75; }
+.legend-box, .inset-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; opacity: 0.96; }
+.scale-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin: 5px 8px 10px;
+  padding: 12px 14px;
+  border-top: 1px solid #dbe4ef;
+  background: var(--soft);
+}
+.scale-title { font-size: 14px; font-weight: 750; color: var(--ink); }
+.scale-control .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+.scale-control label { font-size: 13px; font-weight: 650; }
+.scale-control output {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.scale-controls input[type="range"] { width: 100%; accent-color: #111827; }
+.caption { color: var(--muted); font-size: 13px; padding: 0 8px 8px; }
+.explorer-footer { padding: 16px 2px 0; color: var(--muted); font-size: 13px; }
 [hidden] { display: none !important; }
-@media (max-width: 900px) {
-  #explorer { padding: .7rem; }
-  .explorer-header { display: block; }
-  .integrated-card { margin-top: .8rem; min-width: 0; }
-  .explorer-grid { grid-template-columns: 1fr; }
-  #cross-section-plot { min-height: 32rem; }
-  .potential-card { position: static; width: 100%; box-shadow: none; }
+@media (max-width: 980px) {
+  .explorer-header, .explorer-grid { display: block; }
+  .integrated-card { min-width: 0; margin-top: 16px; }
+  .control-panel { margin-bottom: 18px; }
+  .scale-controls { grid-template-columns: 1fr; gap: 10px; }
+  svg#cross-section-plot { min-height: 420px; }
 }
 """
 _NUMERICS_JS = r"""
@@ -518,7 +575,7 @@ _INTERFACE_HTML = """
   <div><h1 id="explorer-title"></h1><p id="explorer-subtitle"></p></div>
   <div class="integrated-card">
     <span>Angle-integrated elastic cross section</span>
-    <strong id="integrated-value">—</strong>
+    <strong id="integrated-value">&#8212;</strong>
   </div>
 </header>
 <div class="explorer-grid">
@@ -536,11 +593,31 @@ _INTERFACE_HTML = """
     <div id="extrapolation-status" class="status" role="status"></div>
     <div id="prediction-error" class="error" role="alert"></div>
   </aside>
-  <section class="plot-panel" aria-label="Cross-section plots">
-    <div id="cross-section-plot"></div>
-    <div id="potential-card" class="potential-card">
-      <div id="potential-plot"></div>
+  <section class="plot-panel" aria-label="Cross-section plot">
+    <svg id="cross-section-plot" viewBox="0 0 1040 680" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Differential cross section against scattering angle"></svg>
+    <div class="scale-controls">
+      <div class="scale-title">Cross-section plot scale</div>
+      <div class="scale-control">
+        <div class="row"><label for="xs-min-exponent">Y-axis minimum</label><output id="xs-min-value"></output></div>
+        <input id="xs-min-exponent" type="range" step="1">
+      </div>
+      <div class="scale-control">
+        <div class="row"><label for="xs-max-exponent">Y-axis maximum</label><output id="xs-max-value"></output></div>
+        <input id="xs-max-exponent" type="range" step="1">
+      </div>
     </div>
+    <div class="scale-controls" id="potential-scale-controls">
+      <div class="scale-title">Potential inset scale</div>
+      <div class="scale-control">
+        <div class="row"><label for="potential-minimum">Y-axis minimum</label><output id="potential-min-value"></output></div>
+        <input id="potential-minimum" type="range" step="10">
+      </div>
+      <div class="scale-control">
+        <div class="row"><label for="potential-maximum">Y-axis maximum</label><output id="potential-max-value"></output></div>
+        <input id="potential-maximum" type="range" step="10">
+      </div>
+    </div>
+    <div class="caption">Y axis is logarithmic. The inset shows the scaled local optical-potential terms.</div>
   </section>
 </div>
 <footer id="explorer-footer" class="explorer-footer"></footer>
@@ -557,6 +634,9 @@ _INTERFACE_JS = r"""
 (() => {
   const data = LROM_HTML_DATA;
   const byId = id => document.getElementById(id);
+  const svgNS = "http://www.w3.org/2000/svg";
+  const colors = data.options.plot_colors;
+
   const title = byId("explorer-title");
   const subtitle = byId("explorer-subtitle");
   const footer = byId("explorer-footer");
@@ -621,6 +701,336 @@ _INTERFACE_JS = r"""
     fomControl.hidden = true;
   }
 
+  const svg = byId("cross-section-plot");
+  const xsMinInput = byId("xs-min-exponent");
+  const xsMaxInput = byId("xs-max-exponent");
+  const xsMinValue = byId("xs-min-value");
+  const xsMaxValue = byId("xs-max-value");
+  const potentialMinInput = byId("potential-minimum");
+  const potentialMaxInput = byId("potential-maximum");
+  const potentialMinValue = byId("potential-min-value");
+  const potentialMaxValue = byId("potential-max-value");
+  const potentialScaleControls = byId("potential-scale-controls");
+
+  const [initialLow, initialHigh] = data.options.cross_section_y_range;
+  const initialMinExponent = Math.round(Math.log10(initialLow));
+  const initialMaxExponent = Math.round(Math.log10(initialHigh));
+  const exponentFloor = Math.min(-8, initialMinExponent);
+  const exponentCeiling = Math.max(6, initialMaxExponent);
+  xsMinInput.min = exponentFloor;
+  xsMinInput.max = exponentCeiling - 1;
+  xsMaxInput.min = exponentFloor + 1;
+  xsMaxInput.max = exponentCeiling;
+  xsMinInput.value = initialMinExponent;
+  xsMaxInput.value = initialMaxExponent;
+
+  const [initialPotentialLow, initialPotentialHigh] = data.options.potential_y_range;
+  const potentialFloor = Math.min(-200, Math.floor(initialPotentialLow / 10) * 10);
+  const potentialCeiling = Math.max(200, Math.ceil(initialPotentialHigh / 10) * 10);
+  potentialMinInput.min = potentialFloor;
+  potentialMinInput.max = potentialCeiling - 10;
+  potentialMaxInput.min = potentialFloor + 10;
+  potentialMaxInput.max = potentialCeiling;
+  potentialMinInput.value = initialPotentialLow;
+  potentialMaxInput.value = initialPotentialHigh;
+
+  let crossSectionYMin = initialLow;
+  let crossSectionYMax = initialHigh;
+  let potentialYMin = initialPotentialLow;
+  let potentialYMax = initialPotentialHigh;
+
+  const SUPERSCRIPTS = {
+    "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³",
+    "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+  };
+  const superscriptInteger = value => String(value)
+    .split("")
+    .map(character => SUPERSCRIPTS[character] || character)
+    .join("");
+  const reactionLabel = data.science.reaction_label.replace(
+    /^\d+/,
+    match => superscriptInteger(match),
+  );
+
+  function updateScaleLabels() {
+    xsMinValue.textContent = `10${superscriptInteger(Number(xsMinInput.value))}`;
+    xsMaxValue.textContent = `10${superscriptInteger(Number(xsMaxInput.value))}`;
+    potentialMinValue.textContent = `${Number(potentialMinInput.value).toFixed(0)} MeV`;
+    potentialMaxValue.textContent = `${Number(potentialMaxInput.value).toFixed(0)} MeV`;
+  }
+
+  function enforceCrossSectionScale(changed) {
+    let minimum = Number(xsMinInput.value);
+    let maximum = Number(xsMaxInput.value);
+    if (minimum >= maximum) {
+      if (changed === "minimum") {
+        maximum = Math.min(exponentCeiling, minimum + 1);
+        if (maximum <= minimum) minimum = maximum - 1;
+      } else {
+        minimum = Math.max(exponentFloor, maximum - 1);
+        if (minimum >= maximum) maximum = minimum + 1;
+      }
+      xsMinInput.value = minimum;
+      xsMaxInput.value = maximum;
+    }
+    crossSectionYMin = Math.pow(10, Number(xsMinInput.value));
+    crossSectionYMax = Math.pow(10, Number(xsMaxInput.value));
+    updateScaleLabels();
+  }
+
+  function enforcePotentialScale(changed) {
+    let minimum = Number(potentialMinInput.value);
+    let maximum = Number(potentialMaxInput.value);
+    if (minimum >= maximum) {
+      if (changed === "minimum") {
+        maximum = Math.min(potentialCeiling, minimum + 10);
+        if (maximum <= minimum) minimum = maximum - 10;
+      } else {
+        minimum = Math.max(potentialFloor, maximum - 10);
+        if (minimum >= maximum) maximum = minimum + 10;
+      }
+      potentialMinInput.value = minimum;
+      potentialMaxInput.value = maximum;
+    }
+    potentialYMin = Number(potentialMinInput.value);
+    potentialYMax = Number(potentialMaxInput.value);
+    updateScaleLabels();
+  }
+
+  const WIDTH = 1040;
+  const HEIGHT = 680;
+  const MARGIN = {left: 88, right: 24, top: 30, bottom: 76};
+  const PLOT_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
+  const PLOT_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
+  const POTENTIAL_SERIES = [
+    {key: "real_volume", label: "real volume", color: "#2563eb", dash: "", factor: 1},
+    {key: "imaginary_volume", label: "imag volume ×3", color: "#dc2626", dash: "7 4", factor: 3},
+    {key: "imaginary_surface", label: "imag surface ×3", color: "#f97316", dash: "3 3", factor: 3},
+    {key: "spin_orbit", label: "spin-orbit ×25", color: "#16a34a", dash: "8 3 2 3", factor: 25},
+  ];
+
+  function clearSvg() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+  function element(name, attributes) {
+    const node = document.createElementNS(svgNS, name);
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value === null || value === undefined || value === "") continue;
+      node.setAttribute(key, value);
+    }
+    svg.appendChild(node);
+    return node;
+  }
+  function line(x1, y1, x2, y2, className, stroke, width) {
+    return element("line", {
+      x1, y1, x2, y2,
+      class: className || null,
+      stroke: stroke || "#cbd5e1",
+      "stroke-width": width === undefined ? 1 : width,
+    });
+  }
+  function text(x, y, content, anchor, size, rotate) {
+    const node = element("text", {
+      x, y,
+      "text-anchor": anchor || "middle",
+      "font-size": size === undefined ? 15 : size,
+      fill: "#374151",
+      transform: rotate ? `rotate(${rotate}, ${x}, ${y})` : null,
+    });
+    node.textContent = content;
+    return node;
+  }
+  function powerOfTenText(x, y, exponent, size) {
+    const node = element("text", {
+      x, y,
+      "text-anchor": "end",
+      "font-size": size,
+      fill: "#374151",
+    });
+    const base = document.createElementNS(svgNS, "tspan");
+    base.textContent = "10";
+    node.appendChild(base);
+    if (exponent !== 0) {
+      const power = document.createElementNS(svgNS, "tspan");
+      power.setAttribute("baseline-shift", "super");
+      power.setAttribute("font-size", Math.round(size * 0.72));
+      power.textContent = String(exponent);
+      node.appendChild(power);
+    }
+    return node;
+  }
+  function rect(x, y, width, height, className, rx) {
+    return element("rect", {
+      x, y, width, height,
+      rx: rx === undefined ? 6 : rx,
+      class: className || null,
+    });
+  }
+
+  const angleToX = angle => MARGIN.left + angle / 180 * PLOT_WIDTH;
+  function valueToY(value) {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    if (value < crossSectionYMin || value > crossSectionYMax) return null;
+    const span = Math.log10(crossSectionYMax) - Math.log10(crossSectionYMin);
+    return MARGIN.top + (Math.log10(crossSectionYMax) - Math.log10(value)) / span * PLOT_HEIGHT;
+  }
+  function pathFor(angles, values) {
+    let commands = "";
+    let drawing = false;
+    for (let index = 0; index < values.length; index += 1) {
+      const y = valueToY(values[index]);
+      if (y === null) {
+        drawing = false;
+        continue;
+      }
+      commands += `${drawing ? "L" : "M"}${angleToX(angles[index]).toFixed(2)},${y.toFixed(2)} `;
+      drawing = true;
+    }
+    return commands.trim();
+  }
+  function curve(angles, values, className, stroke) {
+    const commands = pathFor(angles, values);
+    if (!commands) return null;
+    return element("path", {
+      d: commands,
+      class: className,
+      fill: "none",
+      stroke,
+    });
+  }
+
+  function drawFrame() {
+    for (const angle of [0, 30, 60, 90, 120, 150, 180]) {
+      const x = angleToX(angle);
+      line(x, MARGIN.top, x, MARGIN.top + PLOT_HEIGHT, "grid");
+      text(x, HEIGHT - 40, String(angle), "middle", 18);
+    }
+    const lowest = Math.ceil(Math.log10(crossSectionYMin));
+    const highest = Math.floor(Math.log10(crossSectionYMax));
+    for (let exponent = lowest; exponent <= highest; exponent += 1) {
+      const y = valueToY(Math.pow(10, exponent));
+      if (y === null) continue;
+      line(MARGIN.left, y, MARGIN.left + PLOT_WIDTH, y, "grid");
+      powerOfTenText(MARGIN.left - 12, y + 6, exponent, 17);
+    }
+    line(MARGIN.left, MARGIN.top + PLOT_HEIGHT, MARGIN.left + PLOT_WIDTH, MARGIN.top + PLOT_HEIGHT, "axis", "#111827", 1.2);
+    line(MARGIN.left, MARGIN.top, MARGIN.left, MARGIN.top + PLOT_HEIGHT, "axis", "#111827", 1.2);
+    text(MARGIN.left + PLOT_WIDTH / 2, HEIGHT - 10, "θ (deg)", "middle", 22);
+    text(22, MARGIN.top + PLOT_HEIGHT / 2, "dσ/dΩ (mb/sr)", "middle", 22, -90);
+    const annotation = text(
+      MARGIN.left + 20,
+      MARGIN.top + PLOT_HEIGHT - 24,
+      `${reactionLabel} at ${data.science.lab_energy_mev} MeV`,
+      "start",
+      28,
+    );
+    annotation.setAttribute("font-weight", "700");
+    annotation.setAttribute("fill", "#111827");
+  }
+
+  function drawMarkers(angles, values, color) {
+    for (let index = 0; index < values.length; index += 3) {
+      const y = valueToY(values[index]);
+      if (y === null) continue;
+      element("circle", {
+        cx: angleToX(angles[index]).toFixed(2),
+        cy: y.toFixed(2),
+        r: 3.2,
+        fill: "none",
+        stroke: color,
+        "stroke-width": 1.4,
+      });
+    }
+  }
+
+  function drawLegend(entries) {
+    if (!entries.length) return;
+    const x = MARGIN.left + 18;
+    const y = MARGIN.top + 18;
+    const height = 22 + entries.length * 29;
+    rect(x, y, 290, height, "legend-box");
+    entries.forEach((entry, index) => {
+      const row = y + 25 + index * 29;
+      if (entry.marker) {
+        element("circle", {
+          cx: x + 37, cy: row, r: 4,
+          fill: "none", stroke: entry.color, "stroke-width": 1.6,
+        });
+      } else {
+        const sample = line(x + 14, row, x + 60, row, "", entry.color, entry.width);
+        if (entry.dash) sample.setAttribute("stroke-dasharray", entry.dash);
+      }
+      text(x + 71, row + 6, entry.label, "start", 15);
+    });
+  }
+
+  function drawPotentialInset(potential) {
+    const inset = {x: 615, y: 48, width: 385, height: 315};
+    rect(inset.x, inset.y, inset.width, inset.height, "inset-box");
+    text(inset.x + 17, inset.y + 27, "Scaled optical-potential terms", "start", 17);
+    const frame = {
+      left: inset.x + 58,
+      right: inset.x + inset.width - 17,
+      top: inset.y + 44,
+      bottom: inset.y + 215,
+    };
+    const radii = potential.radii_fm;
+    const maximumRadius = radii[radii.length - 1];
+    const radiusToX = radius => frame.left + radius / maximumRadius * (frame.right - frame.left);
+    const termToY = value => {
+      if (!Number.isFinite(value) || value < potentialYMin || value > potentialYMax) return null;
+      return frame.top + (potentialYMax - value) / (potentialYMax - potentialYMin) * (frame.bottom - frame.top);
+    };
+    for (let tick = 0; tick <= maximumRadius + 1e-9; tick += maximumRadius / 5) {
+      const x = radiusToX(tick);
+      line(x, frame.top, x, frame.bottom, "", "#e2e8f0", 0.8);
+      text(x, frame.bottom + 18, tick.toFixed(0), "middle", 12);
+    }
+    for (let step = 0; step <= 4; step += 1) {
+      const tick = potentialYMin + step * (potentialYMax - potentialYMin) / 4;
+      const y = termToY(tick);
+      if (y === null) continue;
+      line(frame.left, y, frame.right, y, "", "#e2e8f0", 0.8);
+      text(frame.left - 8, y + 4, Math.abs(tick) >= 10 ? tick.toFixed(0) : tick.toFixed(1), "end", 12);
+    }
+    line(frame.left, frame.bottom, frame.right, frame.bottom, "", "#475569", 1);
+    line(frame.left, frame.top, frame.left, frame.bottom, "", "#475569", 1);
+    text((frame.left + frame.right) / 2, frame.bottom + 37, "r (fm)", "middle", 14);
+    text(inset.x + 17, (frame.top + frame.bottom) / 2, "scaled U term (MeV)", "middle", 13, -90);
+
+    for (const series of POTENTIAL_SERIES) {
+      const values = potential[series.key];
+      let commands = "";
+      let drawing = false;
+      for (let index = 0; index < values.length; index += 1) {
+        const y = termToY(values[index] * series.factor);
+        if (y === null) {
+          drawing = false;
+          continue;
+        }
+        commands += `${drawing ? "L" : "M"}${radiusToX(radii[index]).toFixed(2)},${y.toFixed(2)} `;
+        drawing = true;
+      }
+      if (!commands) continue;
+      const path = element("path", {
+        d: commands.trim(),
+        fill: "none",
+        stroke: series.color,
+        "stroke-width": 2.5,
+      });
+      if (series.dash) path.setAttribute("stroke-dasharray", series.dash);
+    }
+    POTENTIAL_SERIES.forEach((series, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const x = inset.x + 18 + column * 181;
+      const y = inset.y + 263 + row * 27;
+      const sample = line(x, y, x + 31, y, "", series.color, 2.6);
+      if (series.dash) sample.setAttribute("stroke-dasharray", series.dash);
+      text(x + 39, y + 5, series.label, "start", 12);
+    });
+  }
+
   let lastPrediction = null;
   let lastPotential = null;
   let scheduled = false;
@@ -648,65 +1058,35 @@ _INTERFACE_JS = r"""
 
   function renderPlots() {
     if (lastPrediction === null || lastPotential === null) return;
-    const colors = data.options.plot_colors;
+    const angles = data.science.angles_degrees;
     const reference = data.references.central_lrom;
     const fom = data.references.central_fom_evaluation;
-    const traces = [
-      {
-        x: data.science.angles_degrees,
-        y: lastPrediction.cross_section,
-        type: "scatter",
-        mode: "lines",
-        name: "Live LROM",
-        line: {color: colors.live_lrom, width: 4},
-      },
-      {
-        x: reference.angles_degrees,
-        y: reference.cross_section,
-        type: "scatter",
-        mode: "lines",
-        name: "Central LROM",
-        visible: centralToggle.checked,
-        line: {color: colors.central_lrom, width: 2, dash: "dash"},
-      },
-      {
-        x: fom === null ? [] : fom.angles_degrees,
-        y: fom === null ? [] : fom.cross_section,
-        type: "scatter",
-        mode: "markers",
-        name: "Central FOM Evaluation",
-        visible: fom !== null && fomToggle.checked,
-        marker: {color: colors.central_fom_evaluation, size: 5, symbol: "circle-open"},
-      },
-    ];
-    Plotly.react("cross-section-plot", traces, {
-      margin: {l: 78, r: 30, t: 38, b: 65},
-      xaxis: {title: "θ (deg)", range: [0, 180]},
-      yaxis: {
-        title: "dσ/dΩ (mb/sr)",
-        type: "log",
-        range: data.options.cross_section_y_range.map(Math.log10),
-      },
-      legend: {orientation: "h", x: 0, y: 1.08},
-      uirevision: "lrom-cross-section",
-    }, {responsive: true, displaylogo: false});
-
-    const card = byId("potential-card");
-    card.hidden = !potentialToggle.checked;
-    if (potentialToggle.checked) {
-      Plotly.react("potential-plot", [
-        {x: lastPotential.radii_fm, y: lastPotential.real_volume, name: "real volume", mode: "lines"},
-        {x: lastPotential.radii_fm, y: lastPotential.imaginary_volume, name: "imag volume", mode: "lines"},
-        {x: lastPotential.radii_fm, y: lastPotential.imaginary_surface, name: "imag surface", mode: "lines"},
-        {x: lastPotential.radii_fm, y: lastPotential.spin_orbit, name: "spin-orbit", mode: "lines"},
-      ], {
-        margin: {l: 55, r: 15, t: 28, b: 48},
-        xaxis: {title: "r (fm)"},
-        yaxis: {title: "U term (MeV)", range: data.options.potential_y_range},
-        legend: {orientation: "h", font: {size: 10}},
-        uirevision: "lrom-potential",
-      }, {responsive: true, displaylogo: false});
+    const showPotential = potentialToggle.checked;
+    potentialScaleControls.hidden = !showPotential;
+    clearSvg();
+    drawFrame();
+    const legend = [];
+    if (centralToggle.checked) {
+      curve(reference.angles_degrees, reference.cross_section, "reference", colors.central_lrom);
+      legend.push({
+        label: "Central LROM",
+        color: colors.central_lrom,
+        width: 3,
+        dash: "7 5",
+      });
     }
+    if (fom !== null && fomToggle.checked) {
+      drawMarkers(fom.angles_degrees, fom.cross_section, colors.central_fom_evaluation);
+      legend.push({
+        label: "Central FOM Evaluation",
+        color: colors.central_fom_evaluation,
+        marker: true,
+      });
+    }
+    curve(angles, lastPrediction.cross_section, "curve", colors.live_lrom);
+    legend.unshift({label: "Live LROM", color: colors.live_lrom, width: 4.6});
+    drawLegend(legend);
+    if (showPotential) drawPotentialInset(lastPotential);
   }
 
   function evaluate() {
@@ -738,6 +1118,22 @@ _INTERFACE_JS = r"""
   for (const toggle of [centralToggle, fomToggle, potentialToggle]) {
     toggle.addEventListener("change", renderPlots);
   }
+  xsMinInput.addEventListener("input", () => {
+    enforceCrossSectionScale("minimum");
+    renderPlots();
+  });
+  xsMaxInput.addEventListener("input", () => {
+    enforceCrossSectionScale("maximum");
+    renderPlots();
+  });
+  potentialMinInput.addEventListener("input", () => {
+    enforcePotentialScale("minimum");
+    renderPlots();
+  });
+  potentialMaxInput.addEventListener("input", () => {
+    enforcePotentialScale("maximum");
+    renderPlots();
+  });
   byId("reset-center").addEventListener("click", () => {
     for (const {input, parameter} of sliders.values()) input.value = parameter.central;
     scheduleEvaluation();
@@ -751,6 +1147,8 @@ _INTERFACE_JS = r"""
     scheduleEvaluation();
   });
 
+  enforceCrossSectionScale("maximum");
+  enforcePotentialScale("maximum");
   evaluate();
   globalThis.LROM_EXPLORER_READY = true;
 })();
@@ -765,7 +1163,6 @@ _HTML_TEMPLATE = f"""<!doctype html>
 </head>
 <body>
 <main id="explorer">{_INTERFACE_HTML}</main>
-<script>{_PLOTLY_JS}</script>
 <script id="lrom-numerics">{_NUMERICS_JS}</script>
 <script id="lrom-html-data" type="application/json">{_HTML_DATA_MARKER}</script>
 <script>{_BOOTSTRAP_JS}</script>
