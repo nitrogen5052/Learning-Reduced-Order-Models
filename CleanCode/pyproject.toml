@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scattering-lrom"
+version = "0.3.0"
+description = "Learned reduced-order models for neutron elastic scattering"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.16",
+  "matplotlib>=3.10",
+  "pandas>=3.0",
+  "nbformat>=5.10",
+  "nbclient>=0.10",
+  "ipykernel>=7.0",
+  "nuclear-rose>=1.1.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+gpu = ["jax>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lrom*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
