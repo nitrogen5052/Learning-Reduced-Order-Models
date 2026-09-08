@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.matplotlib-cache/
+.venv/
+dist/
+build/
+*.egg-info/
+artifacts/*
+!artifacts/.gitkeep
+!artifacts/real_data_kd_overlays/
+!artifacts/real_data_kd_overlays/*.png
+notebooks/executed/

@@ -1,0 +1,55 @@
+{
+  "edges": [
+    5.0,
+    70.0,
+    135.0,
+    200.0
+  ],
+  "basis_size": 14,
+  "predictors": 20,
+  "ridge": 1e-14,
+  "windows": [
+    {
+      "window": 0,
+      "core": [
+        5.0,
+        70.0
+      ],
+      "support": [
+        5.0,
+        102.5
+      ],
+      "samples": 2032,
+      "seconds": 262.33618420001585,
+      "file": "energy_window_0_b14_p20_ridge1e-14.pkl"
+    },
+    {
+      "window": 1,
+      "core": [
+        70.0,
+        135.0
+      ],
+      "support": [
+        37.5,
+        167.5
+      ],
+      "samples": 1677,
+      "seconds": 251.34167080000043,
+      "file": "energy_window_1_b14_p20_ridge1e-14.pkl"
+    },
+    {
+      "window": 2,
+      "core": [
+        135.0,
+        200.0
+      ],
+      "support": [
+        102.5,
+        200.0
+      ],
+      "samples": 968,
+      "seconds": 178.63377999991644,
+      "file": "energy_window_2_b14_p20_ridge1e-14.pkl"
+    }
+  ]
+}
