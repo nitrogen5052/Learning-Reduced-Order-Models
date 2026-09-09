@@ -1,0 +1,1731 @@
+{
+  "consumer_edges": [
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "BasisConfig",
+        "MaxVol",
+        "ScatteringLROM",
+        "ScatteringProblem",
+        "get_runtime"
+      ],
+      "line": 13,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "absolute_l2",
+        "relative_l2"
+      ],
+      "line": 16,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "target": "diagnostics",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "real_woods_saxon",
+        "two_body_kinematics"
+      ],
+      "line": 14,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "target": "physics",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "latin_hypercube"
+      ],
+      "line": 15,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "target": "reduced",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "BasisConfig",
+        "InputSpace",
+        "MaxVol",
+        "ScatteringLROM",
+        "ScatteringProblem",
+        "get_runtime"
+      ],
+      "line": 19,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "pointwise_relative_error"
+      ],
+      "line": 25,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "target": "diagnostics",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "s_matrices_from_scaled_wavefunctions"
+      ],
+      "line": 23,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "assemble_elastic_cross_sections"
+      ],
+      "line": 24,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "FULL_PARAMETER_NAMES",
+        "real_woods_saxon"
+      ],
+      "line": 22,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "target": "physics",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "get_runtime",
+        "load_three_window_lrom"
+      ],
+      "line": 12,
+      "source": "notebooks/03_curated_data_and_global_lrom.ipynb#cell-2",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "imported": [
+        "load_neutron_elastic",
+        "strict_lrom_selection"
+      ],
+      "line": 13,
+      "source": "notebooks/03_curated_data_and_global_lrom.ipynb#cell-2",
+      "target": "curated_data",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "BasisConfig",
+        "HardRoutedScatteringLROM",
+        "InputSpace",
+        "MaxVol",
+        "ScatteringLROM",
+        "ScatteringProblem"
+      ],
+      "line": 19,
+      "source": "tests/test_core.py",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "TrainingData"
+      ],
+      "line": 23,
+      "source": "tests/test_core.py",
+      "target": "data",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "pointwise_relative_error"
+      ],
+      "line": 10,
+      "source": "tests/test_core.py",
+      "target": "diagnostics",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "ScatteringSystem",
+        "regular_start_s",
+        "s_matrices_from_scaled_wavefunctions",
+        "s_matrix_from_scaled_values",
+        "solve_channel"
+      ],
+      "line": 11,
+      "source": "tests/test_core.py",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "s_matrix_from_scaled_boundary"
+      ],
+      "line": 181,
+      "source": "tests/test_core.py",
+      "target": "fom",
+      "type": "dynamic"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "assemble_elastic_cross_sections",
+        "assemble_varying_energy_cross_sections",
+        "differential_cross_section"
+      ],
+      "line": 15,
+      "source": "tests/test_core.py",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "ElasticCrossSectionKernel"
+      ],
+      "line": 154,
+      "source": "tests/test_core.py",
+      "target": "observables",
+      "type": "dynamic"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "kd_neutron_parameters",
+        "kd_neutron_potential"
+      ],
+      "line": 24,
+      "source": "tests/test_core.py",
+      "target": "physics",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "imported": [
+        "LearnedROM"
+      ],
+      "line": 25,
+      "source": "tests/test_core.py",
+      "target": "reduced",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "imported": [
+        "get_runtime",
+        "load_three_window_lrom"
+      ],
+      "line": 393,
+      "source": "tools/build_collaborator_notebooks.py#embedded-381",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "imported": [
+        "load_neutron_elastic",
+        "strict_lrom_selection"
+      ],
+      "line": 394,
+      "source": "tools/build_collaborator_notebooks.py#embedded-381",
+      "target": "curated_data",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "imported": [
+        "BasisConfig",
+        "MaxVol",
+        "ScatteringLROM",
+        "ScatteringProblem"
+      ],
+      "line": 48,
+      "source": "tools/build_collaborator_notebooks.py#embedded-48",
+      "target": "__init__",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "imported": [
+        "BasisConfig",
+        "MaxVol",
+        "ScatteringLROM",
+        "ScatteringProblem",
+        "get_runtime"
+      ],
+      "line": 49,
+      "source": "tools/build_collaborator_notebooks.py#embedded-49",
+      "target": "__init__",
+      "type": "static"
+    }
+  ],
+  "consumer_external_dependencies": [
+    {
+      "category": "benchmarks",
+      "context": "source",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 11,
+      "source": "benchmarks/rose.py",
+      "type": "static"
+    },
+    {
+      "category": "benchmarks",
+      "context": "source",
+      "display_name": "numba",
+      "distribution": "numba",
+      "import_name": "numba",
+      "line": 12,
+      "source": "benchmarks/rose.py",
+      "type": "static"
+    },
+    {
+      "category": "benchmarks",
+      "context": "source",
+      "display_name": "scipy",
+      "distribution": "scipy",
+      "import_name": "scipy",
+      "line": 17,
+      "source": "benchmarks/rose.py",
+      "type": "dynamic"
+    },
+    {
+      "category": "benchmarks",
+      "context": "source",
+      "display_name": "nuclear-rose (import rose)",
+      "distribution": "nuclear-rose",
+      "import_name": "rose",
+      "line": 25,
+      "source": "benchmarks/rose.py",
+      "type": "dynamic"
+    },
+    {
+      "category": "benchmarks",
+      "context": "source",
+      "display_name": "nuclear-rose (import rose)",
+      "distribution": "nuclear-rose",
+      "import_name": "rose",
+      "line": 317,
+      "source": "benchmarks/rose.py",
+      "type": "dynamic"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "nuclear-rose (import rose)",
+      "distribution": "nuclear-rose",
+      "import_name": "rose",
+      "line": 1,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-10",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 10,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 11,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 8,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "pandas",
+      "distribution": "pandas",
+      "import_name": "pandas",
+      "line": 9,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "scipy",
+      "distribution": "scipy",
+      "import_name": "scipy",
+      "line": 14,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-27",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 15,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-27",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "nuclear-rose (import rose)",
+      "distribution": "nuclear-rose",
+      "import_name": "rose",
+      "line": 3,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-13",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 11,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "pandas",
+      "distribution": "pandas",
+      "import_name": "pandas",
+      "line": 12,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 13,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 14,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 15,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 16,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 17,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 3,
+      "source": "notebooks/03_curated_data_and_global_lrom.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "pandas",
+      "distribution": "pandas",
+      "import_name": "pandas",
+      "line": 4,
+      "source": "notebooks/03_curated_data_and_global_lrom.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "notebooks",
+      "context": "notebook-cell",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 5,
+      "source": "notebooks/03_curated_data_and_global_lrom.ipynb#cell-2",
+      "type": "static"
+    },
+    {
+      "category": "tests",
+      "context": "source",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 8,
+      "source": "tests/test_core.py",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "source",
+      "display_name": "nbformat",
+      "distribution": "nbformat",
+      "import_name": "nbformat",
+      "line": 7,
+      "source": "tools/build_collaborator_notebooks.py",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 384,
+      "source": "tools/build_collaborator_notebooks.py#embedded-381",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "display_name": "pandas",
+      "distribution": "pandas",
+      "import_name": "pandas",
+      "line": 385,
+      "source": "tools/build_collaborator_notebooks.py#embedded-381",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "display_name": "matplotlib",
+      "distribution": "matplotlib",
+      "import_name": "matplotlib",
+      "line": 386,
+      "source": "tools/build_collaborator_notebooks.py#embedded-381",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 39,
+      "source": "tools/build_collaborator_notebooks.py#embedded-39",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "embedded-python",
+      "display_name": "numpy",
+      "distribution": "numpy",
+      "import_name": "numpy",
+      "line": 47,
+      "source": "tools/build_collaborator_notebooks.py#embedded-40",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "source",
+      "display_name": "nbformat",
+      "distribution": "nbformat",
+      "import_name": "nbformat",
+      "line": 4,
+      "source": "tools/run_notebooks.py",
+      "type": "static"
+    },
+    {
+      "category": "tools",
+      "context": "source",
+      "display_name": "nbclient",
+      "distribution": "nbclient",
+      "import_name": "nbclient",
+      "line": 5,
+      "source": "tools/run_notebooks.py",
+      "type": "static"
+    }
+  ],
+  "consumer_groups": [
+    {
+      "category": "benchmarks",
+      "file_count": 2,
+      "lrom_import_count": 0,
+      "lrom_modules": []
+    },
+    {
+      "category": "notebooks",
+      "file_count": 3,
+      "lrom_import_count": 11,
+      "lrom_modules": [
+        "__init__",
+        "curated_data",
+        "diagnostics",
+        "fom",
+        "observables",
+        "physics",
+        "reduced"
+      ]
+    },
+    {
+      "category": "tests",
+      "file_count": 1,
+      "lrom_import_count": 9,
+      "lrom_modules": [
+        "__init__",
+        "data",
+        "diagnostics",
+        "fom",
+        "observables",
+        "physics",
+        "reduced"
+      ]
+    },
+    {
+      "category": "tools",
+      "file_count": 5,
+      "lrom_import_count": 4,
+      "lrom_modules": [
+        "__init__",
+        "curated_data"
+      ]
+    }
+  ],
+  "cycles": [],
+  "edges": [
+    {
+      "source": "__init__",
+      "target": "backends",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "channels",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "data",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "deployment",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "emulator",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "pretrained",
+      "type": "static"
+    },
+    {
+      "source": "__init__",
+      "target": "problem",
+      "type": "static"
+    },
+    {
+      "source": "data",
+      "target": "channels",
+      "type": "static"
+    },
+    {
+      "source": "data",
+      "target": "reduced",
+      "type": "static"
+    },
+    {
+      "source": "deployment",
+      "target": "emulator",
+      "type": "static"
+    },
+    {
+      "source": "deployment",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "source": "diagnostics",
+      "target": "data",
+      "type": "static"
+    },
+    {
+      "source": "diagnostics",
+      "target": "emulator",
+      "type": "static"
+    },
+    {
+      "source": "diagnostics",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "source": "diagnostics",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "channels",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "data",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "problem",
+      "type": "static"
+    },
+    {
+      "source": "emulator",
+      "target": "reduced",
+      "type": "static"
+    },
+    {
+      "source": "fom",
+      "target": "physics",
+      "type": "static"
+    },
+    {
+      "source": "pretrained",
+      "target": "deployment",
+      "type": "static"
+    },
+    {
+      "source": "problem",
+      "target": "channels",
+      "type": "static"
+    },
+    {
+      "source": "problem",
+      "target": "data",
+      "type": "static"
+    },
+    {
+      "source": "problem",
+      "target": "fom",
+      "type": "static"
+    },
+    {
+      "source": "problem",
+      "target": "observables",
+      "type": "static"
+    },
+    {
+      "source": "problem",
+      "target": "physics",
+      "type": "static"
+    }
+  ],
+  "metadata": {
+    "description": "Learned reduced-order models for neutron elastic scattering",
+    "distribution": "scattering-lrom",
+    "evidence_file": "docs/architecture.json",
+    "generator": "tools/architecture_graph.py",
+    "renderer": "tools/render_architecture.py",
+    "source_root": "lrom",
+    "version": "0.3.0"
+  },
+  "nodes": [
+    {
+      "external_dependencies": [],
+      "in_degree": 0,
+      "layer": 6,
+      "loc": 23,
+      "module": "__init__",
+      "out_degree": 8,
+      "path": "lrom/__init__.py",
+      "role": "Self-contained learned reduced-order modeling for neutron scattering.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "jax",
+          "distribution": "jax",
+          "import_name": "jax",
+          "type": "dynamic"
+        },
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 1,
+      "layer": 0,
+      "loc": 67,
+      "module": "backends",
+      "out_degree": 0,
+      "path": "lrom/backends.py",
+      "role": "CPU and optional JAX-GPU backends for batched reduced linear solves.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [],
+      "in_degree": 4,
+      "layer": 0,
+      "loc": 16,
+      "module": "channels",
+      "out_degree": 0,
+      "path": "lrom/channels.py",
+      "role": "Partial-wave channel definitions for spin-1/2 on spin-zero scattering.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 0,
+      "layer": 0,
+      "loc": 42,
+      "module": "cpu_batched",
+      "out_degree": 0,
+      "path": "lrom/cpu_batched.py",
+      "role": "CPU helpers for parallel batches of independent reduced systems.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 0,
+      "layer": 0,
+      "loc": 233,
+      "module": "cuda_batched",
+      "out_degree": 0,
+      "path": "lrom/cuda_batched.py",
+      "role": "Optional Windows CUDA backend for small complex batched linear solves.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        },
+        {
+          "display_name": "pandas",
+          "distribution": "pandas",
+          "import_name": "pandas",
+          "type": "static"
+        }
+      ],
+      "in_degree": 0,
+      "layer": 0,
+      "loc": 74,
+      "module": "curated_data",
+      "out_degree": 0,
+      "path": "lrom/curated_data.py",
+      "role": "Read the vendored curated neutron-elastic JSON records.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 4,
+      "layer": 1,
+      "loc": 223,
+      "module": "data",
+      "out_degree": 2,
+      "path": "lrom/data.py",
+      "role": "Sampling and reusable full-order training databases.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 2,
+      "layer": 4,
+      "loc": 192,
+      "module": "deployment",
+      "out_degree": 2,
+      "path": "lrom/deployment.py",
+      "role": "Low-overhead deployment helpers for hard-routed local LROMs.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 0,
+      "layer": 4,
+      "loc": 87,
+      "module": "diagnostics",
+      "out_degree": 4,
+      "path": "lrom/diagnostics.py",
+      "role": "Numerical diagnostics shared by the demonstration notebooks.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        },
+        {
+          "display_name": "scipy",
+          "distribution": "scipy",
+          "import_name": "scipy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 3,
+      "layer": 3,
+      "loc": 1071,
+      "module": "emulator",
+      "out_degree": 6,
+      "path": "lrom/emulator.py",
+      "role": "User-facing learned emulator and reusable prediction objects.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        },
+        {
+          "display_name": "scipy",
+          "distribution": "scipy",
+          "import_name": "scipy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 4,
+      "layer": 1,
+      "loc": 287,
+      "module": "fom",
+      "out_degree": 1,
+      "path": "lrom/fom.py",
+      "role": "Independent full-order solver on the scaled coordinate ``s = k r``.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 0,
+      "layer": 0,
+      "loc": 56,
+      "module": "global_kd",
+      "out_degree": 0,
+      "path": "lrom/global_kd.py",
+      "role": "Coefficient-level form of the neutron Koning--Delaroche map.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        },
+        {
+          "display_name": "scipy",
+          "distribution": "scipy",
+          "import_name": "scipy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 4,
+      "layer": 0,
+      "loc": 190,
+      "module": "observables",
+      "out_degree": 0,
+      "path": "lrom/observables.py",
+      "role": "Elastic-scattering observables assembled from partial-wave S matrices.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 2,
+      "layer": 0,
+      "loc": 279,
+      "module": "physics",
+      "out_degree": 0,
+      "path": "lrom/physics.py",
+      "role": "Physics ingredients shared by the independent FOM and the LROM.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 1,
+      "layer": 5,
+      "loc": 36,
+      "module": "pretrained",
+      "out_degree": 1,
+      "path": "lrom/pretrained.py",
+      "role": "Load the trusted pretrained deployment distributed with the notebooks.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 2,
+      "layer": 2,
+      "loc": 195,
+      "module": "problem",
+      "out_degree": 5,
+      "path": "lrom/problem.py",
+      "role": "High-level scattering problem and independent FOM data generation.",
+      "role_source": "module docstring first line"
+    },
+    {
+      "external_dependencies": [
+        {
+          "display_name": "numpy",
+          "distribution": "numpy",
+          "import_name": "numpy",
+          "type": "static"
+        }
+      ],
+      "in_degree": 2,
+      "layer": 0,
+      "loc": 306,
+      "module": "reduced",
+      "out_degree": 0,
+      "path": "lrom/reduced.py",
+      "role": "Centered reduced bases and the learned implicit reduced equation.",
+      "role_source": "module docstring first line"
+    }
+  ],
+  "pickle_references": [
+    {
+      "module_strings": [
+        "lrom.emulator",
+        "lrom.fom",
+        "lrom.physics",
+        "lrom.problem",
+        "lrom.reduced"
+      ],
+      "modules": [
+        "emulator",
+        "fom",
+        "physics",
+        "problem",
+        "reduced"
+      ],
+      "scan_method": "pickletools opcode string scan; no unpickling",
+      "source": "models/three_window/energy_window_0_b14_p20_ridge1e-14.pkl"
+    },
+    {
+      "module_strings": [
+        "lrom.emulator",
+        "lrom.fom",
+        "lrom.physics",
+        "lrom.problem",
+        "lrom.reduced"
+      ],
+      "modules": [
+        "emulator",
+        "fom",
+        "physics",
+        "problem",
+        "reduced"
+      ],
+      "scan_method": "pickletools opcode string scan; no unpickling",
+      "source": "models/three_window/energy_window_1_b14_p20_ridge1e-14.pkl"
+    },
+    {
+      "module_strings": [
+        "lrom.emulator",
+        "lrom.fom",
+        "lrom.physics",
+        "lrom.problem",
+        "lrom.reduced"
+      ],
+      "modules": [
+        "emulator",
+        "fom",
+        "physics",
+        "problem",
+        "reduced"
+      ],
+      "scan_method": "pickletools opcode string scan; no unpickling",
+      "source": "models/three_window/energy_window_2_b14_p20_ridge1e-14.pkl"
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "consumer_edge_count": 24,
+    "internal_edge_count": 29,
+    "maximum_layer": 6,
+    "module_count": 17,
+    "pickle_file_count": 3,
+    "total_loc": 3377,
+    "unreferenced_modules": [
+      "cpu_batched",
+      "cuda_batched",
+      "global_kd"
+    ]
+  },
+  "workflow": {
+    "groups": [
+      {
+        "label": "Offline data generation and fitting",
+        "optional": false,
+        "steps": [
+          {
+            "evidence": [
+              {
+                "line": 28,
+                "path": "lrom/data.py",
+                "symbol": "InputSpace.sample"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "sample(count, seed)",
+            "to": "input"
+          },
+          {
+            "evidence": [
+              {
+                "line": 28,
+                "path": "lrom/data.py",
+                "symbol": "InputSpace.sample"
+              }
+            ],
+            "from": "input",
+            "kind": "return",
+            "message": "named samples",
+            "to": "caller"
+          },
+          {
+            "evidence": [
+              {
+                "line": 125,
+                "path": "lrom/problem.py",
+                "symbol": "ScatteringProblem.generate_training_data"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "generate_training_data(samples)",
+            "to": "problem"
+          },
+          {
+            "evidence": [
+              {
+                "line": 140,
+                "path": "lrom/problem.py",
+                "symbol": "ScatteringProblem.generate_training_data -> solve"
+              },
+              {
+                "line": 28,
+                "path": "lrom/fom.py",
+                "symbol": "NumerovFOM.solve"
+              }
+            ],
+            "from": "problem",
+            "kind": "call",
+            "message": "solve each channel and sample",
+            "to": "fom"
+          },
+          {
+            "evidence": [
+              {
+                "line": 155,
+                "path": "lrom/problem.py",
+                "symbol": "TrainingData construction"
+              },
+              {
+                "line": 71,
+                "path": "lrom/data.py",
+                "symbol": "TrainingData"
+              }
+            ],
+            "from": "problem",
+            "kind": "call",
+            "message": "construct TrainingData",
+            "to": "training"
+          },
+          {
+            "evidence": [
+              {
+                "line": 71,
+                "path": "lrom/data.py",
+                "symbol": "TrainingData"
+              }
+            ],
+            "from": "training",
+            "kind": "return",
+            "message": "training database",
+            "to": "caller"
+          },
+          {
+            "evidence": [
+              {
+                "line": 806,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM.__init__"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "construct ScatteringLROM(problem, basis, predictors)",
+            "to": "lrom"
+          },
+          {
+            "evidence": [
+              {
+                "line": 824,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM.train"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "train(training_data)",
+            "to": "lrom"
+          },
+          {
+            "evidence": [
+              {
+                "line": 913,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM.train -> LearnedROM.fit"
+              },
+              {
+                "line": 97,
+                "path": "lrom/reduced.py",
+                "symbol": "LearnedROM.fit"
+              }
+            ],
+            "from": "lrom",
+            "kind": "call",
+            "message": "fit one learned equation per channel",
+            "to": "learned"
+          },
+          {
+            "evidence": [
+              {
+                "line": 950,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM.train -> _build_online_model"
+              },
+              {
+                "line": 961,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM._build_online_model"
+              }
+            ],
+            "from": "lrom",
+            "kind": "call",
+            "message": "build packed online model",
+            "to": "packed"
+          }
+        ]
+      },
+      {
+        "label": "Optional runtime selection before deployment",
+        "optional": true,
+        "steps": [
+          {
+            "evidence": [
+              {
+                "line": 54,
+                "path": "lrom/backends.py",
+                "symbol": "get_runtime"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "get_runtime(backend, precision)",
+            "to": "backends"
+          },
+          {
+            "evidence": [
+              {
+                "line": 58,
+                "path": "lrom/backends.py",
+                "symbol": "get_runtime -> Runtime"
+              },
+              {
+                "line": 10,
+                "path": "lrom/backends.py",
+                "symbol": "Runtime"
+              }
+            ],
+            "from": "backends",
+            "kind": "call",
+            "message": "construct Runtime",
+            "to": "runtime"
+          },
+          {
+            "evidence": [
+              {
+                "line": 10,
+                "path": "lrom/backends.py",
+                "symbol": "Runtime"
+              }
+            ],
+            "from": "runtime",
+            "kind": "return",
+            "message": "selected runtime",
+            "to": "caller"
+          }
+        ]
+      },
+      {
+        "label": "Deployment setup",
+        "optional": false,
+        "steps": [
+          {
+            "evidence": [
+              {
+                "line": 22,
+                "path": "lrom/deployment.py",
+                "symbol": "HardRoutedScatteringLROM.__init__"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "construct with trained models, energy edges, angles, optional Runtime",
+            "to": "router"
+          }
+        ]
+      },
+      {
+        "label": "Scalar routed cross section",
+        "optional": false,
+        "steps": [
+          {
+            "evidence": [
+              {
+                "line": 67,
+                "path": "lrom/deployment.py",
+                "symbol": "HardRoutedScatteringLROM.cross_section"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "cross_section(sample)",
+            "to": "router"
+          },
+          {
+            "evidence": [
+              {
+                "line": 69,
+                "path": "lrom/deployment.py",
+                "symbol": "cross_section -> route_energy"
+              },
+              {
+                "line": 61,
+                "path": "lrom/deployment.py",
+                "symbol": "route_energy"
+              }
+            ],
+            "from": "router",
+            "kind": "call",
+            "message": "route_energy(sample E)",
+            "to": "router"
+          },
+          {
+            "evidence": [
+              {
+                "line": 69,
+                "path": "lrom/deployment.py",
+                "symbol": "router -> ScatteringLROM.cross_section"
+              },
+              {
+                "line": 1027,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM.cross_section"
+              }
+            ],
+            "from": "router",
+            "kind": "call",
+            "message": "cross_section(sample, angles)",
+            "to": "lrom"
+          },
+          {
+            "evidence": [
+              {
+                "line": 1031,
+                "path": "lrom/emulator.py",
+                "symbol": "cross_section -> _fast_cross_section"
+              },
+              {
+                "line": 990,
+                "path": "lrom/emulator.py",
+                "symbol": "ScatteringLROM._fast_cross_section"
+              }
+            ],
+            "from": "lrom",
+            "kind": "call",
+            "message": "_fast_cross_section",
+            "to": "lrom"
+          },
+          {
+            "evidence": [
+              {
+                "line": 1006,
+                "path": "lrom/emulator.py",
+                "symbol": "_fast_cross_section -> packed.s_matrices"
+              }
+            ],
+            "from": "lrom",
+            "kind": "call",
+            "message": "s_matrices(problem, sample, controls)",
+            "to": "packed"
+          },
+          {
+            "evidence": [
+              {
+                "line": 1013,
+                "path": "lrom/emulator.py",
+                "symbol": "ElasticCrossSectionKernel.build"
+              },
+              {
+                "line": 1019,
+                "path": "lrom/emulator.py",
+                "symbol": "ElasticCrossSectionKernel.evaluate"
+              }
+            ],
+            "from": "lrom",
+            "kind": "call",
+            "message": "build once per angle grid, then evaluate",
+            "to": "kernel"
+          },
+          {
+            "evidence": [
+              {
+                "line": 1019,
+                "path": "lrom/emulator.py",
+                "symbol": "cross-section return"
+              }
+            ],
+            "from": "kernel",
+            "kind": "return",
+            "message": "differential cross section",
+            "to": "caller"
+          }
+        ]
+      },
+      {
+        "label": "Optional Runtime-backed partial-wave batch",
+        "optional": true,
+        "steps": [
+          {
+            "evidence": [
+              {
+                "line": 96,
+                "path": "lrom/deployment.py",
+                "symbol": "HardRoutedScatteringLROM.partial_wave_s_matrices"
+              }
+            ],
+            "from": "caller",
+            "kind": "call",
+            "message": "partial_wave_s_matrices(samples)",
+            "to": "router"
+          },
+          {
+            "evidence": [
+              {
+                "line": 131,
+                "path": "lrom/deployment.py",
+                "symbol": "partial_wave_s_matrices -> s_matrices_batch"
+              }
+            ],
+            "from": "router",
+            "kind": "call",
+            "message": "s_matrices_batch with Runtime.solve",
+            "to": "packed"
+          },
+          {
+            "evidence": [
+              {
+                "line": 597,
+                "path": "lrom/emulator.py",
+                "symbol": "s_matrices_batch -> linear_solver"
+              },
+              {
+                "line": 18,
+                "path": "lrom/backends.py",
+                "symbol": "Runtime.solve"
+              }
+            ],
+            "from": "packed",
+            "kind": "call",
+            "message": "solve reduced systems",
+            "to": "runtime"
+          },
+          {
+            "evidence": [
+              {
+                "line": 96,
+                "path": "lrom/deployment.py",
+                "symbol": "partial_wave_s_matrices"
+              }
+            ],
+            "from": "router",
+            "kind": "return",
+            "message": "routed partial-wave S matrices",
+            "to": "caller"
+          }
+        ]
+      }
+    ],
+    "observations": {
+      "construction_api": "ScatteringLROM.__init__ followed by ScatteringLROM.train",
+      "evidence": [
+        {
+          "line": 803,
+          "path": "lrom/emulator.py",
+          "symbol": "ScatteringLROM methods"
+        },
+        {
+          "line": 67,
+          "path": "lrom/deployment.py",
+          "symbol": "HardRoutedScatteringLROM.cross_section"
+        },
+        {
+          "line": 96,
+          "path": "lrom/deployment.py",
+          "symbol": "HardRoutedScatteringLROM.partial_wave_s_matrices"
+        },
+        {
+          "line": 476,
+          "path": "lrom/emulator.py",
+          "symbol": "_PackedOnlineModel.s_matrices_batch"
+        },
+        {
+          "line": 566,
+          "path": "lrom/emulator.py",
+          "symbol": "_PackedOnlineModel.s_matrices_from_feature_batch"
+        }
+      ],
+      "partial_wave_batch_consults_runtime": true,
+      "scalar_cross_section_consults_runtime": false,
+      "scattering_lrom_build_present": false
+    },
+    "participants": [
+      {
+        "id": "caller",
+        "label": "Developer / caller"
+      },
+      {
+        "id": "input",
+        "label": "InputSpace"
+      },
+      {
+        "id": "problem",
+        "label": "ScatteringProblem"
+      },
+      {
+        "id": "fom",
+        "label": "NumerovFOM"
+      },
+      {
+        "id": "training",
+        "label": "TrainingData"
+      },
+      {
+        "id": "lrom",
+        "label": "ScatteringLROM"
+      },
+      {
+        "id": "learned",
+        "label": "LearnedROM"
+      },
+      {
+        "id": "backends",
+        "label": "backends.get_runtime"
+      },
+      {
+        "id": "runtime",
+        "label": "Runtime"
+      },
+      {
+        "id": "router",
+        "label": "HardRoutedScatteringLROM"
+      },
+      {
+        "id": "packed",
+        "label": "Packed online model"
+      },
+      {
+        "id": "kernel",
+        "label": "ElasticCrossSectionKernel"
+      }
+    ]
+  },
+  "workspace_edges": [
+    {
+      "context": "notebook-cell",
+      "line": 2,
+      "source": "notebooks/01_single_wavefunction.ipynb#cell-10",
+      "source_category": "notebooks",
+      "target_category": "benchmarks",
+      "type": "static"
+    },
+    {
+      "context": "notebook-cell",
+      "line": 4,
+      "source": "notebooks/02_elastic_cross_sections.ipynb#cell-13",
+      "source_category": "notebooks",
+      "target_category": "benchmarks",
+      "type": "static"
+    }
+  ]
+}
