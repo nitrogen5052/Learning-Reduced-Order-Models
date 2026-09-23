@@ -4,10 +4,11 @@ Start with [Architecture V5](architecture-pack-v5.md) for the component overview
 
 Read [Architecture mapping methodology](architecture-methodology.md) for the philosophy, evidence hierarchy, diagram grammar, verification process, and lessons used to create V5 and guide later revisions.
 
-Read [LROM in nuclear-reaction theory](LROM_IN_NUCLEAR_THEORY.md) for the scientific context, the connected offline/online/validation/Bayesian workflow, and a concrete package input/output guide. It is separate from the versioned software architecture.
+See [LROM in nuclear-reaction theory](LROM_IN_NUCLEAR_THEORY.md) for the compact scientific workflow and package input/output figures.
 
 ## Earlier versions
 
+- [Original LROM science-context document](legacy/LROM_IN_NUCLEAR_THEORY-v1.md)
 - [Original evidence audit](legacy/architecture-pack.md)
 - [V2 narrative](legacy/architecture-pack-v2.md)
 - [V3 object map](legacy/architecture-pack-v3.md)

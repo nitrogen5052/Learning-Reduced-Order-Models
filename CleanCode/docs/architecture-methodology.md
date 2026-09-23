@@ -213,6 +213,19 @@ Mermaid graph with incorrect semantics is still a failed architecture map.
 
 ## Lessons from the V1–V5 evolution
 
+### Adapting the method to a scientific figure
+
+- Choose the physicist's question and retain only the inputs, transformations,
+  outputs, and feedback needed to answer it.
+- Carry over V5's selectivity and stable visual roles, not its inventory of
+  software components, diagnostics, or contracts.
+- Put details and evidence in an archived companion; do not surround a figure
+  with a tutorial when the requested deliverable is the figure itself.
+- Judge the rendered figure at reading size. Successful rendering alone does
+  not establish readability; cut boxes and labels before shrinking the text.
+
+### Architecture revisions
+
 | Version | Contribution | Lesson carried forward |
 | --- | --- | --- |
 | Original evidence audit | Comprehensive context, dependencies, workflows, decisions, uncertainty, and verification evidence | Preserve a detailed evidence layer, but do not make it the primary onboarding view. |
