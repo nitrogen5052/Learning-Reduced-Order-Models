@@ -1,6 +1,6 @@
 # LROM in nuclear-reaction theory
 
-## Nuclear model → fast observables → inference
+## LROM workflow
 
 ```mermaid
 %%{init: {"themeVariables": {"lineColor": "#2563EB"}, "flowchart": {"nodeSpacing": 25, "rankSpacing": 30, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
