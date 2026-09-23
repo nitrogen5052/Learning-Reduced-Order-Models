@@ -2,6 +2,10 @@
 
 Start with [Architecture V5](architecture-pack-v5.md) for the component overview, object ownership, runtime sequences, and scientific software contracts.
 
+Read [Architecture mapping methodology](architecture-methodology.md) for the philosophy, evidence hierarchy, diagram grammar, verification process, and lessons used to create V5 and guide later revisions.
+
+Read [LROM in nuclear-reaction theory](LROM_IN_NUCLEAR_THEORY.md) for the scientific context, the connected offline/online/validation/Bayesian workflow, and a concrete package input/output guide. It is separate from the versioned software architecture.
+
 ## Earlier versions
 
 - [Original evidence audit](legacy/architecture-pack.md)
