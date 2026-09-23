@@ -3,7 +3,7 @@
 ## Nuclear model → fast observables → inference
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 25, "rankSpacing": 30, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
+%%{init: {"themeVariables": {"lineColor": "#2563EB"}, "flowchart": {"nodeSpacing": 25, "rankSpacing": 30, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
 flowchart TB
     system["Neutron + target<br/>One / many cases: A, Z, E"]
     potential["Optical potential U(r; θ)<br/>parameter overrides"]
@@ -35,6 +35,7 @@ flowchart TB
     prior --> inference
     inference -.->|parameter queries| emulator
 
+    linkStyle default stroke:#2563EB
     classDef physics fill:#DBEAFE,stroke:#2563EB,color:#111827
     classDef reference fill:#F3F4F6,stroke:#6B7280,color:#111827
     classDef model fill:#DCFCE7,stroke:#15803D,color:#111827
@@ -51,24 +52,20 @@ flowchart TB
 ## Package inputs / outputs
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 15, "rankSpacing": 25, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
+%%{init: {"themeVariables": {"lineColor": "#2563EB"}, "flowchart": {"nodeSpacing": 15, "rankSpacing": 25}}}%%
 flowchart LR
-    subgraph inputs["Inputs"]
-        modeldir["Trusted model directory<br/>models/three_window/"]
-        angles["CM angle grid · degrees"]
-        sample["One sample: {A, Z, E}<br/>+ supported potential overrides"]
-        samples["Many samples<br/>list of sample dictionaries"]
-        runtime["Optional batch runtime<br/>CPU default · JAX/GPU"]
-    end
+    modeldir["Trusted model directory<br/>models/three_window/"]
+    angles["CM angle grid · degrees"]
+    sample["One sample: {A, Z, E}<br/>+ supported potential overrides"]
+    samples["Many samples<br/>list of sample dictionaries"]
+    runtime["Optional batch runtime<br/>CPU default · JAX/GPU"]
 
     lrom["LROM<br/>load_three_window_lrom()<br/>evaluate one / many cases"]
 
-    subgraph outputs["Outputs · NumPy arrays"]
-        one["cross_section(sample)<br/>dσ/dΩ · mb/sr<br/>(n_angles,)"]
-        many["cross_sections(samples)<br/>dσ/dΩ · mb/sr<br/>(n_cases, n_angles)"]
-        partial["partial_wave_s_matrices(samples)<br/>S+, S−, wave numbers k<br/>for case-specific angle grids"]
-        inspect["Optional · local-model inspection<br/>coordinates · condition numbers<br/>wavefunctions φ(r)"]
-    end
+    one["cross_section(sample)<br/>dσ/dΩ · mb/sr<br/>(n_angles,)"]
+    many["cross_sections(samples)<br/>dσ/dΩ · mb/sr<br/>(n_cases, n_angles)"]
+    partial["partial_wave_s_matrices(samples)<br/>S+, S−, wave numbers k<br/>for case-specific angle grids"]
+    inspect["Optional · local-model inspection<br/>coordinates · condition numbers<br/>wavefunctions φ(r)"]
 
     modeldir --> lrom
     angles --> lrom
@@ -80,6 +77,7 @@ flowchart LR
     lrom --> partial
     lrom -.-> inspect
 
+    linkStyle default stroke:#2563EB
     classDef physics fill:#DBEAFE,stroke:#2563EB,color:#111827
     classDef model fill:#DCFCE7,stroke:#15803D,color:#111827
     classDef result fill:#FFEDD5,stroke:#C2410C,color:#111827
@@ -88,6 +86,4 @@ flowchart LR
     class lrom model
     class one,many,partial,inspect result
     class modeldir artifact
-    style inputs fill:#F8FAFC,stroke:#94A3B8
-    style outputs fill:#FFFBF5,stroke:#C2410C
 ```
