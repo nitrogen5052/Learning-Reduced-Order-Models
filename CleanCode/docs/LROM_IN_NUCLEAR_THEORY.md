@@ -5,9 +5,10 @@
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 25, "rankSpacing": 30, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
 flowchart TB
-    system["Neutron + target<br/>A, Z, E"]
-    potential["Optical potential<br/>U(r; θ)"]
+    system["Neutron + target<br/>One / many cases: A, Z, E"]
+    potential["Optical potential U(r; θ)<br/>parameter overrides"]
     fom["Full-order scattering<br/>H(θ)φ = Eφ"]
+    settings["Trusted models · CM angles (°)<br/>CPU / optional JAX–GPU"]
 
     subgraph lrom["LROM"]
         train["Offline · training<br/>basis + reduced equations"]
@@ -15,7 +16,8 @@ flowchart TB
         train --> emulator
     end
 
-    observable["Elastic scattering<br/>Sℓ± → dσ/dΩ"]
+    observable["dσ/dΩ (mb/sr) · Sℓ±, k<br/>optional a, κ(M), φ(r)"]
+    html["HTML explorer · legacy<br/>parameter sliders → dσ/dΩ"]
     data["Experiment<br/>d ± σ"]
     prior["Prior<br/>p(θ)"]
     inference["Bayesian inference<br/>p(θ ∣ d) · external"]
@@ -24,7 +26,10 @@ flowchart TB
     potential --> fom
     fom -->|φ, U snapshots| train
     potential -->|predictors p| emulator
+    system --> emulator
+    settings --> emulator
     emulator --> observable
+    train -.->|legacy export| html
     observable -->|predictions| inference
     data --> inference
     prior --> inference
@@ -35,8 +40,8 @@ flowchart TB
     classDef model fill:#DCFCE7,stroke:#15803D,color:#111827
     classDef result fill:#FFEDD5,stroke:#C2410C,color:#111827
     classDef external fill:#EDE9FE,stroke:#7C3AED,color:#111827
-    class system,potential physics
-    class fom reference
+    class system,potential,settings physics
+    class fom,html reference
     class train,emulator model
     class observable result
     class data,prior,inference external
@@ -46,22 +51,43 @@ flowchart TB
 ## Package inputs / outputs
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 15, "rankSpacing": 25, "subGraphTitleMargin": {"top": 5, "bottom": 15}}}}%%
 flowchart LR
-    model["Trusted pretrained models"]
-    inputs["Cases: {A, Z, E}<br/>Angles: degrees"]
-    lrom["LROM<br/>load_three_window_lrom()<br/>cross_sections(cases)"]
-    outputs["dσ/dΩ · mb/sr<br/>array: cases × angles"]
+    subgraph inputs["Inputs"]
+        modeldir["Trusted model directory<br/>models/three_window/"]
+        angles["CM angle grid · degrees"]
+        sample["One sample: {A, Z, E}<br/>+ supported potential overrides"]
+        samples["Many samples<br/>list of sample dictionaries"]
+        runtime["Optional batch runtime<br/>CPU default · JAX/GPU"]
+    end
 
-    model --> lrom
-    inputs --> lrom
-    lrom --> outputs
+    lrom["LROM<br/>load_three_window_lrom()<br/>evaluate one / many cases"]
+
+    subgraph outputs["Outputs · NumPy arrays"]
+        one["cross_section(sample)<br/>dσ/dΩ · mb/sr<br/>(n_angles,)"]
+        many["cross_sections(samples)<br/>dσ/dΩ · mb/sr<br/>(n_cases, n_angles)"]
+        partial["partial_wave_s_matrices(samples)<br/>S+, S−, wave numbers k<br/>for case-specific angle grids"]
+        inspect["Optional · local-model inspection<br/>coordinates · condition numbers<br/>wavefunctions φ(r)"]
+    end
+
+    modeldir --> lrom
+    angles --> lrom
+    sample --> lrom
+    samples --> lrom
+    runtime --> lrom
+    lrom --> one
+    lrom --> many
+    lrom --> partial
+    lrom -.-> inspect
 
     classDef physics fill:#DBEAFE,stroke:#2563EB,color:#111827
     classDef model fill:#DCFCE7,stroke:#15803D,color:#111827
     classDef result fill:#FFEDD5,stroke:#C2410C,color:#111827
     classDef artifact fill:#F3F4F6,stroke:#6B7280,color:#111827
-    class inputs physics
+    class angles,sample,samples,runtime physics
     class lrom model
-    class outputs result
-    class model artifact
+    class one,many,partial,inspect result
+    class modeldir artifact
+    style inputs fill:#F8FAFC,stroke:#94A3B8
+    style outputs fill:#FFFBF5,stroke:#C2410C
 ```

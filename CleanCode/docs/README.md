@@ -8,6 +8,7 @@ See [LROM in nuclear-reaction theory](LROM_IN_NUCLEAR_THEORY.md) for the compact
 
 ## Earlier versions
 
+- [Original four-lane big picture](legacy/BIG_PICTURE.md)
 - [Original LROM science-context document](legacy/LROM_IN_NUCLEAR_THEORY-v1.md)
 - [Original evidence audit](legacy/architecture-pack.md)
 - [V2 narrative](legacy/architecture-pack-v2.md)

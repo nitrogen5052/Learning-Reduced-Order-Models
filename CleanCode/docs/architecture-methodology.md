@@ -234,7 +234,7 @@ Mermaid graph with incorrect semantics is still a failed architecture map.
 | V4 responsibility map | Stable visual rules and a fixed four-layer frame | Stable orientation helps, but a layer model becomes misleading when real calls cross layers or an entity has several roles. |
 | V5 component map | C4-inspired boundary and component views, exact ownership, runtime sequences, artifact lifecycle, contracts, and crosswalk | Use concrete runtime responsibilities without claiming that files are containers or that a strict layer rule exists. |
 
-The separate [big-picture science workflow](BIG_PICTURE.md) adds another lesson:
+The separate [big-picture science workflow](legacy/BIG_PICTURE.md) adds another lesson:
 software architecture and scientific argument should support each other without
 being collapsed into one diagram.
 
