@@ -3,7 +3,7 @@
 > A software mental model for the live `CleanCode` package. This is a selective,
 > C4-inspired set of views, not a claim that Python files or responsibility groups
 > are C4 containers. Detailed audit evidence remains in
-> [`legacy/architecture-pack.md`](legacy/architecture-pack.md).
+> [`legacy/architecture-pack.md`](architecture-pack.md).
 
 ## How to read this map
 

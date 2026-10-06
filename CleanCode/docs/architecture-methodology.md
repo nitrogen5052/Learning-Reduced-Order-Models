@@ -1,8 +1,8 @@
 # Architecture mapping methodology
 
 > The philosophy and repeatable method used to produce
-> [Architecture V5](architecture-pack-v5.md). This document explains how to
-> build and revise the map; V5 remains the description of the current system.
+> [Architecture V5](legacy/architecture-pack-v5.md). This document explains how to
+> build and revise the map. [V6](architecture-pack-v6.md) collects reviewed figures.
 
 ## Purpose
 
