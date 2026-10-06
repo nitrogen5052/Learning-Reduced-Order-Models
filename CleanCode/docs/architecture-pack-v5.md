@@ -7,11 +7,12 @@
 
 ## How to read this map
 
-Each component has a stable ID (`C1`–`C8`). A later heading such as
-**Zoom: C3 → object ownership** means that the figure opens one box from the main
-component map. Component and sequence arrows are calls; ownership arrows are labeled
-with the exact relationship. Flowchart component colors stay stable; sequence diagrams
-use neutral styling.
+Figure 2 groups whole Python files and labels the interactions between them.
+Later figures retain the earlier responsibility IDs (`C1`–`C8`) during review.
+**Zoom: C3 → object ownership** opens the local-emulator responsibility inside
+`emulator.py`. Follow each arrow label for its meaning; arrows can describe
+imports, calls, supplied information, or file transfers. Sequence diagrams
+show call order.
 
 The notation is informed by the [C4 diagram types](https://c4model.com/diagrams)
 and [C4 notation guidance](https://c4model.com/diagrams/notation), while staying small
@@ -67,161 +68,270 @@ how the calculations work inside that boundary.
 it returns the cross section at the chosen angles for one input case. It is
 not the only call a notebook can make.
 
-## Main component map
+## Internal architecture overview — Figure 2
 
-This view names the runtime responsibilities that matter when following a request.
-It is not an import graph and does not impose a top-to-bottom layer rule.
+Figure 2 summarizes the code inside the package. Boxes group whole Python
+files; arrows state a short purpose. External callers, artifacts, hardware,
+and the package boundary are shown in the surrounding views rather than here.
+
+The notebook-import file is grouped with model loading. Potential and
+channel definitions are grouped with the scattering problem. These merge
+files that had only one internal connection in the selective Figure 3 map;
+they do not claim those files have only one import or caller in the code.
+Figure 3 expands these groups, and Figure 4 adds detailed interaction labels.
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 25, "rankSpacing": 38, "wrappingWidth": 280}, "themeVariables": {"fontSize": "18px"}}}%%
 flowchart TB
-    C1["C1 Public surface<br/>re-exports + pretrained loader"]
-    C2["C2 Problem + FOM<br/>physics state and snapshots"]
-    C3["C3 Local emulator<br/>train · inspect · evaluate"]
-    C4["C4 Reduced model<br/>basis + learned equation"]
-    C5["C5 Packed evaluator<br/>batched online equation"]
-    C6["C6 Observable kernel<br/>partial waves → mb/sr"]
-    C7["C7 Hard router<br/>energy-window selection"]
-    C8["C8 Solve runtime<br/>NumPy or optional JAX"]
+    access["<b>\_\_init\_\_.py · pretrained.py</b><br/><small>Notebook access and model loading</small>"]
+    dep["<b>deployment.py</b><br/><small>Energy-window selection</small>"]
+    em["<b>emulator.py</b><br/><small>Emulator training and prediction<br/>Includes packed evaluators</small>"]
+    red["<b>reduced.py</b><br/><small>Reduced basis and learned equation</small>"]
+    dat["<b>data.py</b><br/><small>Sampling and training results</small>"]
+    prob["<b>problem.py · physics.py<br/>channels.py</b><br/><small>Scattering problem and physics</small>"]
+    fom["<b>fom.py</b><br/><small>Full-order solve and boundary matching</small>"]
+    obs["<b>observables.py</b><br/><small>Scattering observables</small>"]
+    solvers["<b>backends.py · cpu_batched.py<br/>cuda_batched.py</b><br/><small>Optional reduced-system solvers</small>"]
+    helpers["<b>curated_data.py · global_kd.py<br/>diagnostics.py</b><br/><small>Research data and comparisons</small>"]
 
-    C1 -->|repack| C3
-    C1 -->|construct| C7
-    C3 -->|problem + matching| C2
-    C3 -->|fit| C4
-    C3 -->|evaluate| C5
-    C3 -->|uses| C6
-    C7 -->|select| C3
-    C7 -->|batch S| C5
-    C7 -->|share kernel| C6
-    C5 -->|potential + k| C2
-    C5 -->|solve| C8
+    access -->|Prepare loaded models| em
+    access -->|Create energy router| dep
+    dep -->|Select and evaluate model| em
+    dep -->|Assemble cross sections| obs
+    em -->|Fit and evaluate reduced model| red
+    em -->|Read training snapshots| dat
+    em -->|Obtain physical inputs| prob
+    em -->|Match boundary values| fom
+    em -->|Assemble cross sections| obs
+    prob -->|Solve radial equation| fom
+    fom -->|Obtain solver inputs| prob
+    prob -->|Store full-order results| dat
+    prob -->|Assemble full-order cross sections| obs
+    dat -->|Sample input space| red
+    em -.->|Solve reduced equations| solvers
+    dep -.->|Use supplied solver| solvers
+    helpers -->|Inspect trained bases| em
+    helpers -->|Read training results| dat
+    helpers -->|Match projected waves| fom
+    helpers -->|Calculate comparison observables| obs
 
-    classDef boundary fill:#DBEAFE,stroke:#2563EB,color:#111827
-    classDef science fill:#FFEDD5,stroke:#C2410C,color:#111827
-    classDef model fill:#DCFCE7,stroke:#15803D,color:#111827
-    classDef deploy fill:#EDE9FE,stroke:#7C3AED,color:#111827
-    class C1 boundary
-    class C2,C6 science
-    class C3,C4,C5 model
-    class C7,C8 deploy
+    classDef accessColor fill:#DBEAFE,stroke:#2563EB,color:#111827
+    classDef scienceColor fill:#FFEDD5,stroke:#C2410C,color:#111827
+    classDef modelColor fill:#DCFCE7,stroke:#15803D,color:#111827
+    classDef runtimeColor fill:#EDE9FE,stroke:#7C3AED,color:#111827
+    classDef helperColor fill:#F3F4F6,stroke:#6B7280,color:#111827
+    class access accessColor
+    class prob,fom,obs scienceColor
+    class em,red,dat modelColor
+    class dep,solvers runtimeColor
+    class helpers helperColor
 ```
 
-The shortest useful mental image is:
+## Whole-file overview — Figure 3
 
-> `C7 router → C3 local emulator → channel model → C4 LearnedROM`, with `C5`
-> as a derived fast layout and `C6` as the shared observable calculation.
+Figure 3 expands Figure 2 inside the `lrom package` boundary from Figure 1. Boxes contain whole
+Python files; the optional solver and research-helper boxes collect several
+whole files. Each file belongs to one box. Arrows give a short purpose for
+each interaction. Positions do not prescribe calculation order.
 
-`C2 NumerovFOM` participates in snapshot generation, not online prediction.
-
-## Fig-2-sci — scientific workflow of the LROM
-
-### Mermaid version
+This overview covers all 17 package files. Figure 4 keeps the same boxes and
+connections, with more detailed interaction labels for manual code review.
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 22, "rankSpacing": 28, "wrappingWidth": 360, "subGraphTitleMargin": {"top": 8, "bottom": 18}}, "themeVariables": {"fontSize": "17px"}}}%%
-flowchart LR
-    subgraph SCI_OFFLINE["Offline stage"]
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 50, "wrappingWidth": 280, "subGraphTitleMargin": {"top": 10, "bottom": 24}}, "themeVariables": {"fontSize": "18px"}}}%%
+flowchart TB
+    user["Research code<br/>notebook · script"]
+    saved[("Trained LROM<br/>.pkl files")]
+    archive[("TrainingData .npz<br/>optional")]
+    records[("Curated experimental<br/>JSON files")]
+    gpu["Optional JAX/GPU"]
+    cuda["Optional CUDA libraries<br/>direct loader: Windows"]
+
+    subgraph package["lrom package"]
         direction TB
-        Oinput["Input: training cases αₘ and central reference α₀<br/>α = (θ, A, Z, E)"]
+        init["\_\_init\_\_.py<br/>Notebook imports"]
+        pre["pretrained.py<br/>Load trained models"]
+        dep["deployment.py<br/>Energy-window selection"]
+        em["emulator.py<br/>Train, inspect and predict<br/>Includes packed evaluators"]
+        red["reduced.py<br/>Basis and learned equation"]
+        dat["data.py<br/>Sampling and TrainingData"]
+        prob["problem.py<br/>Define scattering cases<br/>Generate training results"]
+        fom["fom.py<br/>Numerov solve, kinematics container<br/>and boundary matching"]
+        phys["physics.py<br/>Potentials and kinematics"]
+        ch["channels.py<br/>Partial-wave definitions"]
+        obs["observables.py<br/>S matrices → cross sections"]
+        solvers["Optional reduced-system solvers<br/>backends.py: NumPy / JAX Runtime<br/>cpu_batched.py: threaded CPU<br/>cuda_batched.py: direct CUDA"]
+        helpers["Research helpers<br/>curated_data.py: experimental records<br/>global_kd.py: KD coefficient mapping<br/>diagnostics.py: numerical comparisons"]
 
-        subgraph Obr["Training calculations"]
-            direction LR
-            subgraph Owave["Wavefunction snapshots"]
-                direction TB
-                Ofom["1. Solve the radial equation with Numerov<br/>φ″ = [ℓ(ℓ+1)/s² + U(s; α) − 1] φ<br/>s = kr; regular origin φ ∝ s<sup>ℓ+1</sup>"]
-                Obasis["2. Center on φ₀ and retain n SVD modes<br/>δφₘ = φ(s; αₘ) − φ₀(s)<br/>Φ = [v₁, …, vₙ]"]
-                Ocoords["3. Project the snapshots<br/>aₘ = argminₐ ‖W<sup>1/2</sup>(δφₘ − Φa)‖²<br/>W: trapezoid integration weights"]
-                Ofom --> Obasis --> Ocoords
-            end
-            subgraph Opot["Potential predictors"]
-                direction TB
-                Ovalues["1. Evaluate scaled training potentials<br/>U(s; α) = V<sub>ℓj</sub>(s/k; α) / E<sub>cm</sub>(α)<br/>ΔUₘ = U(s; αₘ) − U(s; α₀)"]
-                Oselect["2. Select n<sub>U</sub> predictor locations s<sub>q</sub><br/>Greedy MaxVol on truncated SVD modes of ΔU"]
-                Ofeatures["3. Center and scale the selected values<br/>p<sub>q</sub> = [U(s<sub>q</sub>; α) − U(s<sub>q</sub>; α₀)] / σ<sub>q</sub><br/>Append centered/scaled A, Z, E<br/>σ<sub>q</sub> = max(std<sub>train</sub>, 10⁻¹²)"]
-                Ovalues --> Oselect --> Ofeatures
-            end
-        end
+        init -->|"Expose loader"| pre
+        pre -->|"Prepare loaded models"| em
+        pre -->|"Create energy router"| dep
+        dep -->|"Select and evaluate model"| em
+        dep -->|"Assemble cross sections"| obs
+        em -->|"Fit and evaluate reduced model"| red
+        em -->|"Read training snapshots"| dat
+        em -->|"Obtain physical inputs"| prob
+        em -->|"Match boundary values"| fom
+        em -->|"Assemble cross sections"| obs
+        prob -->|"Solve radial equation"| fom
+        fom -->|"Obtain solver inputs"| prob
+        prob -->|"Evaluate potential and kinematics"| phys
+        prob -->|"Define partial waves"| ch
+        prob -->|"Store full-order results"| dat
+        prob -->|"Assemble full-order cross sections"| obs
+        dat -->|"Sample input space"| red
+        em -.->|"Solve reduced equations"| solvers
+        dep -.->|"Use supplied solver"| solvers
+        helpers -->|"Inspect trained bases"| em
+        helpers -->|"Read training results"| dat
+        helpers -->|"Match projected waves"| fom
+        helpers -->|"Calculate comparison observables"| obs
 
-        Oinput --> Ofom
-        Oinput --> Ovalues
-        Ofit["4. Learn matrices M<sub>q</sub> and vectors b<sub>q</sub><br/>rₘ = aₘ + ∑<sub>q</sub> p<sub>q</sub>(αₘ)(M<sub>q</sub>aₘ − b<sub>q</sub>)<br/>Minimize ∑ₘ ‖rₘ‖² + λ<sub>eff</sub>‖Θ‖²<sub>F</sub><br/>λ<sub>eff</sub> = λ σ<sub>max</sub>(D)²"]
-        Oboundary["5. Cache values at the matching point s*<br/>v₀ = φ₀(s*), v = Φ(s*)<br/>d₀ = φ₀′(s*), d = Φ′(s*)"]
-        Ocoords -->|training coordinates| Ofit
-        Ofeatures -->|training predictors| Ofit
-        Obasis -->|reference and basis| Oboundary
-        Ostore["Trained local model<br/>Predictor locations, reference values and scales<br/>Learned M<sub>q</sub>, b<sub>q</sub>; cached v₀, v, d₀, d<br/>Supplied models: n = 14, n<sub>U</sub> = 20, n<sub>p</sub> = 23; λ = 10⁻¹⁴"]
-        Ofit --> Ostore
-        Oboundary --> Ostore
-        Ofeatures --> Ostore
     end
 
-    subgraph SCI_ONLINE["Online stage"]
-        direction TB
-        Qinput["Input: new α = (θ, A, Z, E) and angles ϑ"]
-        Qwindow["Select one trained energy window using E<br/>[5, 70), [70, 135), [135, 200] MeV"]
-        Qfeatures["1–2. Evaluate and normalize the selected potential values<br/>U<sub>q</sub> = V<sub>ℓj</sub>(s<sub>q</sub>/k; α) / E<sub>cm</sub>(α)<br/>p<sub>q</sub> = [U<sub>q</sub> − U(s<sub>q</sub>; α₀)] / σ<sub>q</sub><br/>Append centered/scaled A, Z, E"]
-        Qassemble["3–4. Assemble the learned system<br/>M(p) = I + ∑<sub>q</sub> p<sub>q</sub>M<sub>q</sub><br/>b(p) = ∑<sub>q</sub> p<sub>q</sub>b<sub>q</sub>"]
-        Qsolve["5. Solve the n × n system for each partial wave<br/>M(p) a = b(p)"]
-        Qboundary["6. Evaluate boundary values and match to free waves<br/>φ* = v₀ + va; φ*′ = d₀ + da; L = φ*′/φ*<br/>S<sub>ℓ</sub><sup>±</sup> = −(h₋′ − Lh₋) / (h₊′ − Lh₊)"]
-        Qobservable["Combine partial waves into f and g<br/>dσ/dΩ = 10 (|f|² + |g|²)  [mb/sr]<br/>Fast prediction uses boundary values;<br/>full wavefunctions are optional"]
-        Qinput --> Qwindow --> Qfeatures --> Qassemble --> Qsolve --> Qboundary --> Qobservable
-    end
+    user -->|"Import package names"| init
+    user -->|"Request cross sections"| dep
+    saved -->|"Load trained models"| pre
+    dat -->|"Save training data"| archive
+    archive -->|"Load training data"| dat
+    solvers -.->|"Run JAX GPU solves"| gpu
+    solvers -.->|"Run direct CUDA solves"| cuda
+    records -->|"Read experimental records"| helpers
+    user -.->|"Use research tools"| helpers
 
-    SCI_OFFLINE -->|reuse trained predictors, equation coefficients and boundary data| SCI_ONLINE
-
-    classDef input fill:#FFFFFF,stroke:#20385A,color:#182330,stroke-dasharray:5 4
-    classDef wave fill:#F3F8FD,stroke:#4689CF,color:#182330
-    classDef potential fill:#FFFAF1,stroke:#D58A14,color:#182330
-    classDef fit fill:#FFF6F5,stroke:#BF3745,color:#182330
-    classDef online fill:#F7F3FB,stroke:#7352B4,color:#182330
-    classDef result fill:#F7FBF4,stroke:#50883C,color:#182330
-    classDef stored fill:#F7F9FC,stroke:#20385A,color:#182330
-    class Oinput,Qinput input
-    class Ofom,Obasis,Ocoords,Oboundary wave
-    class Ovalues,Oselect,Ofeatures potential
-    class Ofit fit
-    class Qfeatures,Qassemble,Qsolve online
-    class Qboundary,Qobservable result
-    class Ostore,Qwindow stored
-    style SCI_OFFLINE fill:#FFFFFF,stroke:#20385A,stroke-width:2px
-    style SCI_ONLINE fill:#FFFFFF,stroke:#20385A,stroke-width:2px
-    style Obr fill:#FFFFFF,stroke:none
-    style Owave fill:#F3F8FD,stroke:#4689CF
-    style Opot fill:#FFFAF1,stroke:#D58A14
+    classDef accessColor fill:#DBEAFE,stroke:#2563EB,color:#111827
+    classDef scienceColor fill:#FFEDD5,stroke:#C2410C,color:#111827
+    classDef modelColor fill:#DCFCE7,stroke:#15803D,color:#111827
+    classDef runtimeColor fill:#EDE9FE,stroke:#7C3AED,color:#111827
+    classDef artifactColor fill:#F3E8FF,stroke:#7E22CE,color:#111827
+    classDef optionalColor fill:#F3F4F6,stroke:#6B7280,color:#111827
+    class init,pre accessColor
+    class prob,fom,phys,ch,obs scienceColor
+    class em,red,dat modelColor
+    class dep,solvers runtimeColor
+    class saved,archive,records artifactColor
+    class user,gpu,cuda,helpers optionalColor
+    style package fill:#FFFFFF,stroke:#15803D,stroke-width:2px
 ```
 
-### Illustrated version
+The main prediction path is model loading → energy-window selection →
+emulator evaluation → scattering observables. Training also uses the
+scattering problem, full-order solver, training results, and reduced model.
+The two arrows between `problem.py` and `fom.py` represent different calls:
+the problem requests a radial solution; the solver obtains its physical
+inputs from the problem.
 
-![Fig-2-sci: offline construction and online evaluation of the learned reduced-order scattering model](figures/fig-2-sci.png)
+## File interactions — Figure 4
 
-[Vector version](figures/fig-2-sci.svg).
+This detailed version names functions or describes the call, data access,
+or file transfer. The files and connections are the same as in Figure 3.
+Normal function returns and supporting imports are omitted.
 
-**Fig-2-sci.** Offline construction and online evaluation of the supplied
-three-window neutron-elastic LROM. Each window has a separate reduced model
-for every partial wave. Numerov solutions on the common coordinate \(s=kr\)
-provide centered wavefunction modes and training coordinates. Selected
-potential values, together with \(A,Z,E\), become normalized predictors for
-the learned implicit equation. The illustrated version uses colored arrows
-for predictor definitions (orange), fitted equation coefficients (red), and
-boundary data (blue); the Mermaid version collects these in the trained-model
-box. At a new input, the selected window evaluates these predictors,
-solves the reduced equations, obtains \(S_\ell^\pm\) by boundary matching,
-and combines partial waves into the differential cross section.
+```mermaid
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 50, "wrappingWidth": 280, "subGraphTitleMargin": {"top": 10, "bottom": 24}}, "themeVariables": {"fontSize": "18px"}}}%%
+flowchart TB
+    user["Research code<br/>notebook · script"]
+    saved[("Trained LROM<br/>.pkl files")]
+    archive[("TrainingData .npz<br/>optional")]
+    records[("Curated experimental<br/>JSON files")]
+    gpu["Optional JAX/GPU"]
+    cuda["Optional CUDA libraries<br/>direct loader: Windows"]
 
-Here \(\phi_0=\phi(s;\alpha_0)\) is the central reference solution, \(W\) contains
-trapezoid integration weights, and \(s_*\) is the matching point. \(\Theta\)
-collects the fitted \(M_q,b_q\) coefficients; the regression matrix \(D\) has
-row blocks \([p_q(\alpha_m)a_m^T,-p_q(\alpha_m)]\).
-\(h_\pm=s[j_\ell(s)\pm i y_\ell(s)]\), with primes denoting \(s\)-derivatives.
-The amplitudes \(f,g\) are the spin-nonflip and spin-flip partial-wave sums,
-including their \(1/(2ik)\) factors; the factor 10 converts fm² to mb.
+    subgraph package["lrom package"]
+        direction TB
+        init["\_\_init\_\_.py<br/>Notebook imports"]
+        pre["pretrained.py<br/>Load trained models"]
+        dep["deployment.py<br/>Energy-window selection"]
+        em["emulator.py<br/>Train, inspect and predict<br/>Includes packed evaluators"]
+        red["reduced.py<br/>Basis and learned equation"]
+        dat["data.py<br/>Sampling and TrainingData"]
+        prob["problem.py<br/>Define scattering cases<br/>Generate training results"]
+        fom["fom.py<br/>Numerov solve, kinematics container<br/>and boundary matching"]
+        phys["physics.py<br/>Potentials and kinematics"]
+        ch["channels.py<br/>Partial-wave definitions"]
+        obs["observables.py<br/>S matrices → cross sections"]
+        solvers["Optional reduced-system solvers<br/>backends.py: NumPy / JAX Runtime<br/>cpu_batched.py: threaded CPU<br/>cuda_batched.py: direct CUDA"]
+        helpers["Research helpers<br/>curated_data.py: experimental records<br/>global_kd.py: KD coefficient mapping<br/>diagnostics.py: numerical comparisons"]
 
-Layout follows Fig. 3 (p. 7) of the
-[ROSE paper](../../../scientific_archive/ROSE_Guide/ROSEPaper%5B7945%5D.pdf).
-The equations and steps here follow the current `lrom` implementation:
-`problem.py`, `fom.py`, `reduced.py`, `emulator.py`, `deployment.py`, and
-`observables.py`. This LROM learns its matrix and right-hand side from
-snapshot coordinates; no ROSE EIM inverse or Galerkin operator projection
-is used in this path.
+        init -->|"imports/exposes<br/>load_three_window_lrom"| pre
+        pre -->|"calls<br/>ScatteringLROM.repack('padded')"| em
+        pre -->|"constructs HardRoutedScatteringLROM<br/>models + energy edges + angles"| dep
+        dep -->|"selects model; calls cross_section(s)<br/>or packed S-matrix evaluation"| em
+        dep -->|"builds and evaluates shared<br/>ElasticCrossSectionKernel"| obs
+        em -->|"calls basis/equation fitting<br/>and coordinate reconstruction"| red
+        em -->|"train() reads<br/>TrainingData snapshots"| dat
+        em -->|"calls system() / omega()<br/>kinematics + optical parameters"| prob
+        em -->|"calls boundary matching<br/>for channel inspection"| fom
+        em -->|"calls angular-kernel evaluation<br/>and cross-section assembly"| obs
+        prob -->|"calls NumerovFOM.solve()<br/>training waves + S matrices"| fom
+        fom -->|"solve() calls system() / omega()<br/>for its physical inputs"| prob
+        prob -->|"calls potential evaluation<br/>and kinematics"| phys
+        prob -->|"calls elastic_channels()"| ch
+        prob -->|"constructs TrainingData<br/>waves + potentials + S matrices"| dat
+        prob -->|"calls full-order<br/>cross-section assembly"| obs
+        dat -->|"sample() calls latin_hypercube()"| red
+        em -.->|"optional solve callable<br/>M a = b; default: NumPy"| solvers
+        dep -.->|"partial-wave routes<br/>call supplied solver.solve()"| solvers
+        helpers -->|"diagnostics reads/projects<br/>trained channel bases"| em
+        helpers -->|"diagnostics reads<br/>training waves + inputs"| dat
+        helpers -->|"diagnostics calls<br/>boundary matching"| fom
+        helpers -->|"diagnostics calls<br/>cross-section assembly"| obs
+
+    end
+
+    user -->|"from lrom import …"| init
+    user -->|"cross_section() example<br/>from Figure 1"| dep
+    saved -->|"pickle.load() reads<br/>three trained models"| pre
+    dat -->|"TrainingData.save()"| archive
+    archive -->|"TrainingData.load()"| dat
+    solvers -.->|"backends.py configures<br/>JAX GPU solves"| gpu
+    solvers -.->|"cuda_batched.py calls<br/>CUDA / cuBLAS solves"| cuda
+    records -->|"curated_data.py reads records<br/>and converts b/sr → mb/sr"| helpers
+    user -.->|"can call helper functions<br/>and wire their results into a workflow"| helpers
+
+    classDef accessColor fill:#DBEAFE,stroke:#2563EB,color:#111827
+    classDef scienceColor fill:#FFEDD5,stroke:#C2410C,color:#111827
+    classDef modelColor fill:#DCFCE7,stroke:#15803D,color:#111827
+    classDef runtimeColor fill:#EDE9FE,stroke:#7C3AED,color:#111827
+    classDef artifactColor fill:#F3E8FF,stroke:#7E22CE,color:#111827
+    classDef optionalColor fill:#F3F4F6,stroke:#6B7280,color:#111827
+    class init,pre accessColor
+    class prob,fom,phys,ch,obs scienceColor
+    class em,red,dat modelColor
+    class dep,solvers runtimeColor
+    class saved,archive,records artifactColor
+    class user,gpu,cuda,helpers optionalColor
+    style package fill:#FFFFFF,stroke:#15803D,stroke-width:2px
+```
+
+The notebook can load trained models or construct a scattering problem and
+train an emulator from `TrainingData`. During prediction, `deployment.py`
+selects a model, `emulator.py` evaluates its reduced equations and boundary
+S matrices, and `observables.py` calculates the cross section. The packed
+prediction code and the local emulator are both in `emulator.py`.
+
+The problem and Numerov solver communicate in both directions:
+`ScatteringProblem.generate_training_data()` calls `NumerovFOM.solve()`,
+and that solver calls `problem.system()` and `problem.omega()` to obtain
+its inputs. Full-order radial solves are used to generate training results;
+shared kinematics and boundary helpers remain useful during prediction.
+
+Optional solvers are supplied as objects or callables. `emulator.py` does
+not import the solver implementation files. With no supplied solver, its
+batched reduced systems use NumPy directly. `global_kd.py` and
+`curated_data.py` are independently callable tools; their outputs are wired
+into a research workflow by its caller. Their presence does not mean they
+are automatically called by every prediction.
+
+The curated-JSON and direct-CUDA connections extend Figure 1's selective
+boundary view. NumPy, SciPy, pandas, and Python standard-library dependencies
+are not exhaustively drawn. Bidirectional calls and file transfers are
+explicitly labeled; ordinary returned numerical arrays are implicit.
+
+For the later, not-yet-reviewed figures, the earlier responsibility IDs
+remain: C1 access/loading; C2 problem/FOM; C3 local emulator; C4 reduced model;
+C5 packed evaluator; C6 observables; C7 router; C8 runtime. C3 and C5 both
+map to `emulator.py` in this whole-file view.
 
 ## Zoom: C3 → object ownership
 
