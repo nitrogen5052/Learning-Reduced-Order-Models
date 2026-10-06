@@ -17,25 +17,29 @@ The notation is informed by the [C4 diagram types](https://c4model.com/diagrams)
 and [C4 notation guidance](https://c4model.com/diagrams/notation), while staying small
 enough to match this single-process scientific library.
 
-## Boundary view — where the library runs
+## Boundary view — user to package
 
-The caller hosts the library in one Python process. There is no service, worker, or
-runtime dispatcher behind `lrom.__init__`; that module only re-exports public names.
+The notebook or script calls the `lrom` package directly. The library's files
+also import code from one another to carry out that work. There is no separate
+service or worker.
+Training data can stay in memory. Saving them as an `.npz` file is optional;
+loading that file later lets a researcher reuse the full-order results.
 
 ```mermaid
 flowchart LR
-    subgraph process["One caller-owned Python process"]
-        caller["Research code<br/>notebook · script · test"]
-        library["scattering-lrom<br/>in-process library"]
-        caller -->|imports and calls| library
+    subgraph interaction["User to Package"]
+        caller["Research code<br/>notebook · script"]
+        library["lrom package"]
+        caller -->|"HardRoutedScatteringLROM.cross_section()"| library
     end
     train[("TrainingData .npz<br/>optional")]
-    model[("Trusted model .pkl<br/>supplied deployment")]
-    gpu["Optional JAX/GPU<br/>batched dense solve"]
+    model[("Trained LROM<br/>.pkl files")]
+    gpu["Optional JAX/GPU"]
 
-    library -->|save / load| train
-    model -->|trusted unpickle| library
-    library -.->|explicit partial-wave solve route| gpu
+    library -->|"save: TrainingData.save()"| train
+    train -->|"load: TrainingData.load()"| library
+    model -->|"load only: load_three_window_lrom()<br/>no .pkl save function"| library
+    library -.->|"partial_wave_s_matrices_gpu()"| gpu
 
     classDef person fill:#DBEAFE,stroke:#2563EB,color:#111827
     classDef system fill:#DCFCE7,stroke:#15803D,color:#111827
@@ -46,6 +50,22 @@ flowchart LR
     class train,model store
     class gpu optional
 ```
+
+`TrainingData` is an object in memory that holds full-order results for the
+sampled cases, including wavefunctions, potentials, and S-matrix values. The
+optional `.npz` file saves that object for later reuse.
+`ScatteringLROM` has no public `.pkl` save or load method. The separate
+`load_three_window_lrom()` function reads the three repository-trained LROM
+files; only trusted pickle files should be loaded.
+`partial_wave_s_matrices()` processes many cases at once. Its reduced solves
+use NumPy on the CPU by default, or an explicitly supplied runtime. The
+separate `partial_wave_s_matrices_gpu()` method takes a GPU solver directly.
+Figure 1 shows the boundary around the package: who uses it, which files it
+reads or writes, and which optional hardware it can call. Later figures show
+how the calculations work inside that boundary.
+`HardRoutedScatteringLROM.cross_section()` on the caller arrow is one example:
+it returns the cross section at the chosen angles for one input case. It is
+not the only call a notebook can make.
 
 ## Main component map
 
@@ -91,6 +111,39 @@ The shortest useful mental image is:
 > as a derived fast layout and `C6` as the shared observable calculation.
 
 `C2 NumerovFOM` participates in snapshot generation, not online prediction.
+
+## Fig-2-sci — scientific workflow of the LROM
+
+![Fig-2-sci: offline construction and online evaluation of the learned reduced-order scattering model](figures/fig-2-sci.png)
+
+[Vector version](figures/fig-2-sci.svg).
+
+**Fig-2-sci.** Offline construction and online evaluation of the supplied
+three-window neutron-elastic LROM. Each window has a separate reduced model
+for every partial wave. Numerov solutions on the common coordinate \(s=kr\)
+provide centered wavefunction modes and training coordinates. Selected
+potential values, together with \(A,Z,E\), become normalized predictors for
+the learned implicit equation. The colored arrows carry predictor definitions
+(orange), fitted equation coefficients (red), and boundary data (blue) into
+prediction. At a new input, the selected window evaluates these predictors,
+solves the reduced equations, obtains \(S_\ell^\pm\) by boundary matching,
+and combines partial waves into the differential cross section.
+
+Here \(\phi_0=\phi(s;\alpha_0)\) is the central reference solution, \(W\) contains
+trapezoid integration weights, and \(s_*\) is the matching point. \(\Theta\)
+collects the fitted \(M_q,b_q\) coefficients; the regression matrix \(D\) has
+row blocks \([p_q(\alpha_m)a_m^T,-p_q(\alpha_m)]\).
+\(h_\pm=s[j_\ell(s)\pm i y_\ell(s)]\), with primes denoting \(s\)-derivatives.
+The amplitudes \(f,g\) are the spin-nonflip and spin-flip partial-wave sums,
+including their \(1/(2ik)\) factors; the factor 10 converts fm² to mb.
+
+Layout follows Fig. 3 (p. 7) of the
+[ROSE paper](../../../scientific_archive/ROSE_Guide/ROSEPaper%5B7945%5D.pdf).
+The equations and steps here follow the current `lrom` implementation:
+`problem.py`, `fom.py`, `reduced.py`, `emulator.py`, `deployment.py`, and
+`observables.py`. This LROM learns its matrix and right-hand side from
+snapshot coordinates; no ROSE EIM inverse or Galerkin operator projection
+is used in this path.
 
 ## Zoom: C3 → object ownership
 
