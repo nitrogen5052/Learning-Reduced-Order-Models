@@ -1,0 +1,29 @@
+% Requires \usepackage{graphicx}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.92\linewidth]{figures/lrom_manifold.pdf}
+    \caption{(Placeholder) Woods--Saxon interaction families, their corresponding wavefunction snapshots, and the centered reduced representation. The red dashed lines mark the potential-evaluation locations used as LROM predictors. Panel (c) shows the reference solution $\phi_0$ and the first four reduced modes, rescaled to comparable amplitudes for visualization.}
+    \label{fig:lrom-manifold}
+\end{figure}
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.98\textwidth]{figures/lrom_coordinates.pdf}
+    \caption{(Placeholder) Evolution of the dominant coordinate $a_1$ and the more challenging coordinate $a_4$ as the Woods--Saxon radius and depth vary. Open circles denote least-squares projections of the full-order solutions, solid curves show LROM predictions, and dashed curves show Galerkin predictions. The lower panels report the corresponding absolute coordinate errors; shaded regions lie outside the training interval in radius.}
+    \label{fig:lrom-coordinates}
+\end{figure*}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.98\linewidth]{figures/rose_lrom_cat_one_column.pdf}
+    \caption{(Placeholder) Computational accuracy versus online evaluation time for LROM and ROSE configurations labeled by the number of wavefunction modes $n_\phi$ and learned operators $n_{\mathrm{op}}$. The lower strip shows the corresponding full-order-model evaluation costs.}
+    \label{fig:rose-lrom-cat}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.56\linewidth]{figures/global_cross_sections.pdf}
+    \caption{(Placeholder) Representative neutron elastic-scattering angular distributions across the nuclear chart. Curated measurements are compared with canonical Koning--Delaroche calculations and the posterior LROM prediction, including 68\% and 95\% posterior-predictive intervals. Successive distributions are multiplied by the indicated powers of ten.}
+    \label{fig:global-cross-sections}
+\end{figure}

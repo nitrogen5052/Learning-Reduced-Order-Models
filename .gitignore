@@ -7,3 +7,6 @@ __pycache__/
 outputs/
 tmp/
 .venv-jitr/
+paper-v1/studies/likelihood_models/data/*.npz
+paper-v1/studies/likelihood_models/data/*/posterior*.npz
+paper-v1/studies/likelihood_models/data/*/*payload*.npz
